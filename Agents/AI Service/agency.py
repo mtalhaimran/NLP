@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 
 MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "CLIENT"]}
 
+# Default timeout (in seconds) for each agent run. The models can be quite
+# slow to respond, especially on lower-spec hardware. 60 seconds proved too
+# short in practice, so we use a more generous default and expose it via the
+# CLI for user customisation.
+DEFAULT_TIMEOUT: float = 180.0
+
 # ─── DATA SCHEMA ───────────────────────────────────────────────────────
 class Project(BaseModel):
     name: str = Field(..., description="Project name")
@@ -167,7 +173,7 @@ class Agent:
         obj, _ = decoder.raw_decode(text[start:])
         return obj
 
-    async def run(self, project_json: str, context: Dict[str, Any], timeout: Optional[float] = 60.0) -> Any:
+    async def run(self, project_json: str, context: Dict[str, Any], timeout: Optional[float] = DEFAULT_TIMEOUT) -> Any:
         """
         Invoke the LLM with formatted messages and return parsed JSON.
         Raises ValueError on invalid JSON, or asyncio.TimeoutError on timeout.
@@ -202,7 +208,7 @@ class Agent:
 
 class B2BAgency:
     """Orchestrates a sequence of role-based agents and exports to PDF."""
-    def __init__(self):
+    def __init__(self, timeout: float = DEFAULT_TIMEOUT):
         self.agents = [
             Agent("CEO", CEO_PROMPT),
             Agent("CTO", CTO_PROMPT),
@@ -212,13 +218,14 @@ class B2BAgency:
         ]
         self.context: Dict[str, Any] = {}
         self.results: Dict[str, Any] = {}
+        self.timeout = timeout
 
     async def run_pipeline(self, project: Project) -> Dict[str, Any]:
         pj = project.model_dump_json()
         for agent in self.agents:
             logger.info(f"Running {agent.role} agent…")
             try:
-                res = await agent.run(pj, self.context)
+                res = await agent.run(pj, self.context, self.timeout)
                 self.context[agent.role] = res
                 self.results[agent.role] = res
             except Exception as e:
@@ -265,6 +272,7 @@ def main(
     timeline: str = typer.Option(..., "--timeline", help="Expected timeline, e.g. 3-4 months"),
     priority: str = typer.Option(..., "--priority", help="High | Medium | Low"),
     output: Path = typer.Option(Path("proposal.pdf"), "--output", "-o", help="Output PDF path"),
+    timeout: float = typer.Option(DEFAULT_TIMEOUT, "--timeout", help="Agent timeout in seconds"),
 ) -> None:
     """CLI entrypoint to generate a project proposal PDF."""
     try:
@@ -280,7 +288,7 @@ def main(
         logger.error("Project validation failed: %s", ve)
         raise typer.Exit(code=1)
 
-    agency = B2BAgency()
+    agency = B2BAgency(timeout=timeout)
     try:
         results = asyncio.run(agency.run_pipeline(project))
         agency.export_pdf(project, output)
