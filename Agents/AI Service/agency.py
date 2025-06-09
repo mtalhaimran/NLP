@@ -157,6 +157,16 @@ class Agent:
         logger.info(f"Loading {role} model: {model_name}")
         self.llm = ChatOllama(model=model_name)
 
+    @staticmethod
+    def _parse_json(text: str) -> Any:
+        """Extract and parse the first JSON object found in text."""
+        start = text.find("{")
+        if start == -1:
+            raise json.JSONDecodeError("No JSON object found", text, 0)
+        decoder = json.JSONDecoder()
+        obj, _ = decoder.raw_decode(text[start:])
+        return obj
+
     async def run(self, project_json: str, context: Dict[str, Any], timeout: Optional[float] = 60.0) -> Any:
         """
         Invoke the LLM with formatted messages and return parsed JSON.
@@ -176,15 +186,18 @@ class Agent:
                 timeout,
             )
             raw = getattr(message, "content", message)
-            parsed = json.loads(raw)
+            try:
+                parsed = self._parse_json(raw)
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"Non-JSON response from {self.role}, returning raw text"
+                )
+                parsed = raw
             logger.info(f"{self.role} responded successfully")
             return parsed
         except asyncio.TimeoutError:
             logger.error(f"{self.role} agent timed out after {timeout}s")
             raise
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON from {self.role}: {raw}")
-            raise ValueError(f"JSON parsing failed for {self.role}")
 
 
 class B2BAgency:
