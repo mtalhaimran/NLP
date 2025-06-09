@@ -52,112 +52,101 @@ def draw_border(canvas, doc):
 # ─── PROMPT TEMPLATES ──────────────────────────────────────────────────
 CEO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
-        "You are the Chief Strategy Officer. Given the project data, perform a detailed Go/No-Go analysis. Provide output strictly as JSON matching this schema:
-"
-        "{{
-"
-        "  \"decision\": \"<GO|NO_GO>\",
-"
-        "  \"key_risks\": [ \"risk1\", \"risk2\", \"risk3\" ],
-"
-        "  \"opportunities\": [ \"op1\", \"op2\", \"op3\" ],
-"
-        "  \"recommendations\": [ {{ \"title\": \"Recommendation title\", \"detail\": \"Recommendation detail\" }} ]
-"
-        "}}"
-    ),
+        '''
+You are the Chief Strategy Officer. Given the project data, perform a detailed Go/No-Go analysis. Provide output strictly as JSON matching this schema:
+{{
+  "decision": "<GO|NO_GO>",
+  "key_risks": [ "risk1", "risk2", "risk3" ],
+  "opportunities": [ "op1", "op2", "op3" ],
+  "recommendations": [ {{ "title": "Recommendation title", "detail": "Recommendation detail" }} ]
+}}
+'''    ),
     HumanMessagePromptTemplate.from_template(
-        "Project Data:
+        '''
+Project Data:
 ```json
 {project}
 ```
-"
-        "Respond only with the JSON above, without additional commentary."
-    ),
+Respond only with the JSON above, without additional commentary.
+'''    ),
 ])
 
 CTO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
-        "You are the CTO. Based on the project data and CEO analysis, propose a robust system architecture and technology stack. Your response should include:
-"
-        "1. A bulleted list describing the overall architecture.
-"
-        "2. A JSON object with keys:
-"
-        "   \"architecture\": \"<brief description>\",
-"
-        "   \"components\": [ {{ \"name\": \"<component name>\", \"purpose\": \"<component purpose>\" }} ],
-"
-        "   \"scalability_plan\": \"<how the system will scale>\"
-"
-    ),
+        '''
+You are the CTO. Based on the project data and CEO analysis, propose a robust system architecture and technology stack. Your response should include:
+1. A bulleted list describing the overall architecture.
+2. A JSON object with keys:
+   "architecture": "<brief description>",
+   "components": [ {{ "name": "<component name>", "purpose": "<component purpose>" }} ],
+   "scalability_plan": "<how the system will scale>"
+'''    ),
     HumanMessagePromptTemplate.from_template(
-        "Project Data:
+        '''
+Project Data:
 ```json
 {project}
 ```
-"
-        "CEO Analysis:
+CEO Analysis:
 ```json
 {CEO}
-```"
+```'''
     ),
 ])
 
 PM_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
-        "You are the Product Manager. Craft a detailed three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. Under each header, include bullet points for objectives and key deliverables."
-    ),
+        '''
+You are the Product Manager. Craft a detailed three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. Under each header, include bullet points for objectives and key deliverables.
+'''    ),
     HumanMessagePromptTemplate.from_template(
-        "Project Data:
+        '''
+Project Data:
 ```json
 {project}
 ```
-"
-        "CTO Specification:
+CTO Specification:
 ```json
 {CTO}
-```"
+```'''
     ),
 ])
 
 DEV_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
-        "You are the Lead Developer. For each phase of the roadmap, generate a JSON section containing:
-"
-        " - \"tasks\": a list of task descriptions,
-"
-        " - \"ci_cd\": an object with \"tool\" and \"pipeline_overview\" fields.
-"
-        "Provide valid JSON only."
-    ),
+        '''
+You are the Lead Developer. For each phase of the roadmap, generate a JSON section containing:
+ - "tasks": a list of task descriptions,
+ - "ci_cd": an object with "tool" and "pipeline_overview" fields.
+Provide valid JSON only.
+'''    ),
     HumanMessagePromptTemplate.from_template(
-        "Roadmap:
+        '''
+Roadmap:
 ```markdown
 {PM}
-```"
-    ),
+```
+'''    ),
 ])
 
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
-        "You are the Client Success Manager. Based on the implementation plan, draft JSON containing:
-"
-        " - \"onboarding_process\": an array of steps with \"step\" and \"description\",
-"
-        " - \"retention_strategy\": an array of strategies,
-"
-        " - \"feedback_loop\": an array of feedback mechanisms.
-"
-        "Provide JSON only."
-    ),
+        '''
+You are the Client Success Manager. Based on the implementation plan, draft JSON containing:
+ - "onboarding_process": an array of steps with "step" and "description",
+ - "retention_strategy": an array of strategies,
+ - "feedback_loop": an array of feedback mechanisms.
+Provide JSON only.
+'''    ),
     HumanMessagePromptTemplate.from_template(
-        "Implementation Details:
+        '''
+Implementation Details:
 ```json
 {DEV}
-```"
+```'''
     ),
 ])
+
 # ─── AGENT & PIPELINE ─────────────────────────────────────────────────
 class Agent:
     """Wraps a role-based LLM agent with prompt and model."""
@@ -182,7 +171,7 @@ class Agent:
         ).to_messages()
 
         try:
-            raw = await asyncio.wait_for(
+            raw: str = await asyncio.wait_for(
                 asyncio.to_thread(lambda: self.llm.invoke(messages)),
                 timeout,
             )
@@ -193,7 +182,7 @@ class Agent:
             logger.error(f"{self.role} agent timed out after {timeout}s")
             raise
         except json.JSONDecodeError:
-            logger.error(f"Invalid JSON from {self.role: raw}")
+            logger.error(f"Invalid JSON from {self.role}: {raw}")
             raise ValueError(f"JSON parsing failed for {self.role}")
 
 
