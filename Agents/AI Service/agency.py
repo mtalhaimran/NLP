@@ -171,10 +171,11 @@ class Agent:
         ).to_messages()
 
         try:
-            raw: str = await asyncio.wait_for(
-                asyncio.to_thread(lambda: self.llm.invoke(messages)),
+            message = await asyncio.wait_for(
+                asyncio.to_thread(self.llm.invoke, messages),
                 timeout,
             )
+            raw = getattr(message, "content", message)
             parsed = json.loads(raw)
             logger.info(f"{self.role} responded successfully")
             return parsed
