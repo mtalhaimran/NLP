@@ -186,15 +186,18 @@ class Agent:
                 timeout,
             )
             raw = getattr(message, "content", message)
-            parsed = self._parse_json(raw)
+            try:
+                parsed = self._parse_json(raw)
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"Non-JSON response from {self.role}, returning raw text"
+                )
+                parsed = raw
             logger.info(f"{self.role} responded successfully")
             return parsed
         except asyncio.TimeoutError:
             logger.error(f"{self.role} agent timed out after {timeout}s")
             raise
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON from {self.role}: {raw}")
-            raise ValueError(f"JSON parsing failed for {self.role}")
 
 
 class B2BAgency:
