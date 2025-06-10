@@ -108,7 +108,7 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Product Manager. Craft a detailed three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. Under each header, include bullet points for objectives and key deliverables.
+You are the Product Manager. Craft a **detailed** three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. For each phase list **at least four** bullet points describing objectives and key deliverables so the downstream agents have plenty of context.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
@@ -143,7 +143,7 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Marketing Manager. Using the product roadmap, craft a concise go-to-market plan. Include bullet points for target audience, primary channels, and messaging themes.
+You are the Marketing Manager. Using the product roadmap, produce a thorough go-to-market plan in JSON with keys 'audience', 'channels', and 'messaging'. Each key should map to an array of detailed bullet points.
 '''
     ),
     HumanMessagePromptTemplate.from_template(

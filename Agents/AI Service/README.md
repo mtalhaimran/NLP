@@ -71,10 +71,16 @@ Before anything else, Please get your OpenAI API Key here: https://platform.open
     ```bash
     pip install -r requirements.txt
     ```
+3. **Start an Ollama server**:
+   ```bash
+   ollama serve
+   ```
+   The agents expect the server on http://localhost:11434. Set `OLLAMA_BASE_URL` to use a remote instance.
 
-3. **Run the Streamlit app**:
+
+4. **Run the Streamlit app**:
     ```bash
     streamlit run ai_services_agency/agency.py
     ```
 
-4. **Enter your OpenAI API Key** in the sidebar when prompted and start analyzing your startup idea!
+5. **Enter your OpenAI API Key** in the sidebar when prompted and start analyzing your startup idea!
