@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import typer
 from pydantic import BaseModel, Field, ValidationError
@@ -24,7 +24,7 @@ from langchain_ollama import ChatOllama
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "CLIENT"]}
+MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "MARKETING", "CLIENT"]}
 
 # Default timeout (in seconds) for each agent run. The models can be quite
 # slow to respond, especially on lower-spec hardware. 60 seconds proved too
@@ -135,6 +135,26 @@ Roadmap:
 '''    ),
 ])
 
+MARKETING_PROMPT = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template(
+        '''
+You are the Marketing Manager. Using the product roadmap, craft a concise go-to-market plan. Include bullet points for target audience, primary channels, and messaging themes.
+'''
+    ),
+    HumanMessagePromptTemplate.from_template(
+        '''
+Project Data:
+```json
+{project}
+```
+Roadmap:
+```markdown
+{PM}
+```
+'''
+    ),
+])
+
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
@@ -213,24 +233,47 @@ class B2BAgency:
             Agent("CEO", CEO_PROMPT),
             Agent("CTO", CTO_PROMPT),
             Agent("PM", PM_PROMPT),
+            Agent("MARKETING", MARKETING_PROMPT),
             Agent("DEV", DEV_PROMPT),
             Agent("CLIENT", CLIENT_PROMPT),
         ]
+        self.agent_map = {a.role: a for a in self.agents}
         self.context: Dict[str, Any] = {}
         self.results: Dict[str, Any] = {}
         self.timeout = timeout
+        self.msg_queue: asyncio.Queue = asyncio.Queue()
+        self.events: Dict[str, asyncio.Event] = {a.role: asyncio.Event() for a in self.agents}
+
+    async def _run_agent(self, role: str, project_json: str, deps: Optional[List[str]] = None) -> Any:
+        if deps:
+            await asyncio.gather(*(self.events[d].wait() for d in deps))
+        agent = self.agent_map[role]
+        logger.info(f"Running {role} agent…")
+        res = await agent.run(project_json, self.context, self.timeout)
+        self.context[role] = res
+        self.results[role] = res
+        self.events[role].set()
+        await self.msg_queue.put((role, res))
+        return res
 
     async def run_pipeline(self, project: Project) -> Dict[str, Any]:
         pj = project.model_dump_json()
-        for agent in self.agents:
-            logger.info(f"Running {agent.role} agent…")
-            try:
-                res = await agent.run(pj, self.context, self.timeout)
-                self.context[agent.role] = res
-                self.results[agent.role] = res
-            except Exception as e:
-                logger.exception(f"Agent {agent.role} failed: {e}")
-                break
+
+        # CEO runs first
+        await self._run_agent("CEO", pj)
+
+        # CTO depends on CEO
+        cto_task = asyncio.create_task(self._run_agent("CTO", pj, ["CEO"]))
+
+        async def pm_flow() -> None:
+            await self.events["CTO"].wait()
+            await self._run_agent("PM", pj, ["CTO"])
+            dev_task = asyncio.create_task(self._run_agent("DEV", pj, ["CTO", "PM"]))
+            marketing_task = asyncio.create_task(self._run_agent("MARKETING", pj, ["PM"]))
+            await asyncio.gather(dev_task, marketing_task)
+            await self._run_agent("CLIENT", pj, ["DEV"])
+
+        await asyncio.gather(cto_task, pm_flow())
         return self.results
 
     def export_pdf(self, project: Project, out_path: Path) -> None:
