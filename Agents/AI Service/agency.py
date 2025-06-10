@@ -8,7 +8,14 @@ from typing import Any, Dict, Optional, List
 import typer
 from pydantic import BaseModel, Field, ValidationError
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Preformatted
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    PageBreak,
+    Preformatted,
+    ListFlowable,
+)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -43,16 +50,14 @@ class Project(BaseModel):
 
 # ─── PDF BORDER ────────────────────────────────────────────────────────
 def draw_border(canvas, doc):
+    """Draw a light grey border respecting the document margins."""
     canvas.saveState()
     canvas.setStrokeColor(colors.lightgrey)
-    canvas.rect(
-        0.5 * inch,
-        0.5 * inch,
-        doc.pagesize[0] - inch,
-        doc.pagesize[1] - inch,
-        stroke=1,
-        fill=0,
-    )
+    x = doc.leftMargin
+    y = doc.bottomMargin
+    width = doc.width
+    height = doc.height
+    canvas.rect(x, y, width, height, stroke=1, fill=0)
     canvas.restoreState()
 
 # ─── PROMPT TEMPLATES ──────────────────────────────────────────────────
@@ -277,29 +282,102 @@ class B2BAgency:
         return self.results
 
     def export_pdf(self, project: Project, out_path: Path) -> None:
+        """Render proposal results into a formatted PDF."""
+
+        def to_flowables(data: Any) -> List[Any]:
+            flows: List[Any] = []
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    flows.append(Paragraph(str(k).replace("_", " ").title(), styles["SubHeading"]))
+                    flows.extend(to_flowables(v))
+            elif isinstance(data, list):
+                if all(isinstance(i, (str, int, float)) for i in data):
+                    items = [Paragraph(str(i), styles["Normal"]) for i in data]
+                    flows.append(ListFlowable(items, bulletType="bullet", leftIndent=20, spaceBefore=2, spaceAfter=6))
+                else:
+                    for item in data:
+                        flows.extend(to_flowables(item))
+            elif isinstance(data, (str, int, float)):
+                flows.append(Paragraph(str(data), styles["Normal"]))
+            else:
+                flows.append(Preformatted(json.dumps(data, indent=2), styles["Normal"]))
+            return flows
+
         try:
             doc = SimpleDocTemplate(
-                str(out_path), pagesize=letter,
-                leftMargin=0.75 * inch, rightMargin=0.75 * inch,
-                topMargin=1 * inch, bottomMargin=1 * inch,
+                str(out_path),
+                pagesize=letter,
+                leftMargin=0.75 * inch,
+                rightMargin=0.75 * inch,
+                topMargin=1 * inch,
+                bottomMargin=1 * inch,
             )
+
             styles = getSampleStyleSheet()
-            styles.add(ParagraphStyle("DocTitle", parent=styles["Heading1"], fontSize=24, leading=28, spaceAfter=24))
-            styles.add(ParagraphStyle("Section", parent=styles["Heading2"], fontSize=16, leading=20, spaceBefore=12, spaceAfter=6))
+            styles.add(
+                ParagraphStyle(
+                    "DocTitle",
+                    parent=styles["Heading1"],
+                    fontSize=28,
+                    leading=32,
+                    alignment=1,
+                    spaceAfter=24,
+                )
+            )
+            styles.add(
+                ParagraphStyle(
+                    "Subtitle",
+                    parent=styles["Heading2"],
+                    fontSize=16,
+                    leading=20,
+                    alignment=1,
+                    textColor=colors.grey,
+                    spaceAfter=48,
+                )
+            )
+            styles.add(
+                ParagraphStyle(
+                    "Section",
+                    parent=styles["Heading2"],
+                    fontSize=18,
+                    leading=22,
+                    textColor=colors.darkblue,
+                    spaceBefore=12,
+                    spaceAfter=8,
+                )
+            )
+            styles.add(
+                ParagraphStyle(
+                    "SubHeading",
+                    parent=styles["Heading3"],
+                    fontSize=14,
+                    leading=18,
+                    spaceBefore=6,
+                    spaceAfter=4,
+                )
+            )
             styles["Normal"].fontSize = 11
             styles["Normal"].leading = 14
 
-            story = [Paragraph(project.name, styles["DocTitle"])]
+            story: List[Any] = [
+                Paragraph(project.name, styles["DocTitle"]),
+                Paragraph(project.description, styles["Subtitle"]),
+                PageBreak(),
+            ]
+
             for role, content in self.results.items():
-                story.append(PageBreak())
                 story.append(Paragraph(f"{role} Analysis", styles["Section"]))
-                story.append(Preformatted(json.dumps(content, indent=2), styles["Normal"]))
-                story.append(Spacer(1, 12))
+                story.extend(to_flowables(content))
+                story.append(PageBreak())
+
+            # Remove last page break for cleaner output
+            if story and isinstance(story[-1], PageBreak):
+                story.pop()
 
             doc.build(story, onFirstPage=draw_border, onLaterPages=draw_border)
-            logger.info(f"PDF exported to {out_path}")
+            logger.info("PDF exported to %s", out_path)
         except Exception as e:
-            logger.exception(f"Failed to export PDF: {e}")
+            logger.exception("Failed to export PDF: %s", e)
             raise
 
 
