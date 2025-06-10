@@ -3,12 +3,19 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import typer
 from pydantic import BaseModel, Field, ValidationError
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Preformatted
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    PageBreak,
+    Preformatted,
+    ListFlowable,
+)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -24,7 +31,7 @@ from langchain_ollama import ChatOllama
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "CLIENT"]}
+MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "MARKETING", "CLIENT"]}
 
 # Default timeout (in seconds) for each agent run. The models can be quite
 # slow to respond, especially on lower-spec hardware. 60 seconds proved too
@@ -43,16 +50,14 @@ class Project(BaseModel):
 
 # ─── PDF BORDER ────────────────────────────────────────────────────────
 def draw_border(canvas, doc):
+    """Draw a light grey border respecting the document margins."""
     canvas.saveState()
     canvas.setStrokeColor(colors.lightgrey)
-    canvas.rect(
-        0.5 * inch,
-        0.5 * inch,
-        doc.pagesize[0] - inch,
-        doc.pagesize[1] - inch,
-        stroke=1,
-        fill=0,
-    )
+    x = doc.leftMargin
+    y = doc.bottomMargin
+    width = doc.width
+    height = doc.height
+    canvas.rect(x, y, width, height, stroke=1, fill=0)
     canvas.restoreState()
 
 # ─── PROMPT TEMPLATES ──────────────────────────────────────────────────
@@ -135,6 +140,26 @@ Roadmap:
 '''    ),
 ])
 
+MARKETING_PROMPT = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template(
+        '''
+You are the Marketing Manager. Using the product roadmap, craft a concise go-to-market plan. Include bullet points for target audience, primary channels, and messaging themes.
+'''
+    ),
+    HumanMessagePromptTemplate.from_template(
+        '''
+Project Data:
+```json
+{project}
+```
+Roadmap:
+```markdown
+{PM}
+```
+'''
+    ),
+])
+
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
@@ -213,50 +238,146 @@ class B2BAgency:
             Agent("CEO", CEO_PROMPT),
             Agent("CTO", CTO_PROMPT),
             Agent("PM", PM_PROMPT),
+            Agent("MARKETING", MARKETING_PROMPT),
             Agent("DEV", DEV_PROMPT),
             Agent("CLIENT", CLIENT_PROMPT),
         ]
+        self.agent_map = {a.role: a for a in self.agents}
         self.context: Dict[str, Any] = {}
         self.results: Dict[str, Any] = {}
         self.timeout = timeout
+        self.msg_queue: asyncio.Queue = asyncio.Queue()
+        self.events: Dict[str, asyncio.Event] = {a.role: asyncio.Event() for a in self.agents}
+
+    async def _run_agent(self, role: str, project_json: str, deps: Optional[List[str]] = None) -> Any:
+        if deps:
+            await asyncio.gather(*(self.events[d].wait() for d in deps))
+        agent = self.agent_map[role]
+        logger.info(f"Running {role} agent…")
+        res = await agent.run(project_json, self.context, self.timeout)
+        self.context[role] = res
+        self.results[role] = res
+        self.events[role].set()
+        await self.msg_queue.put((role, res))
+        return res
 
     async def run_pipeline(self, project: Project) -> Dict[str, Any]:
         pj = project.model_dump_json()
-        for agent in self.agents:
-            logger.info(f"Running {agent.role} agent…")
-            try:
-                res = await agent.run(pj, self.context, self.timeout)
-                self.context[agent.role] = res
-                self.results[agent.role] = res
-            except Exception as e:
-                logger.exception(f"Agent {agent.role} failed: {e}")
-                break
+
+        # CEO runs first
+        await self._run_agent("CEO", pj)
+
+        # CTO depends on CEO
+        cto_task = asyncio.create_task(self._run_agent("CTO", pj, ["CEO"]))
+
+        async def pm_flow() -> None:
+            await self.events["CTO"].wait()
+            await self._run_agent("PM", pj, ["CTO"])
+            dev_task = asyncio.create_task(self._run_agent("DEV", pj, ["CTO", "PM"]))
+            marketing_task = asyncio.create_task(self._run_agent("MARKETING", pj, ["PM"]))
+            await asyncio.gather(dev_task, marketing_task)
+            await self._run_agent("CLIENT", pj, ["DEV"])
+
+        await asyncio.gather(cto_task, pm_flow())
         return self.results
 
     def export_pdf(self, project: Project, out_path: Path) -> None:
+        """Render proposal results into a formatted PDF."""
+
+        def to_flowables(data: Any) -> List[Any]:
+            flows: List[Any] = []
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    flows.append(Paragraph(str(k).replace("_", " ").title(), styles["SubHeading"]))
+                    flows.extend(to_flowables(v))
+            elif isinstance(data, list):
+                if all(isinstance(i, (str, int, float)) for i in data):
+                    items = [Paragraph(str(i), styles["Normal"]) for i in data]
+                    flows.append(ListFlowable(items, bulletType="bullet", leftIndent=20, spaceBefore=2, spaceAfter=6))
+                else:
+                    for item in data:
+                        flows.extend(to_flowables(item))
+            elif isinstance(data, (str, int, float)):
+                flows.append(Paragraph(str(data), styles["Normal"]))
+            else:
+                flows.append(Preformatted(json.dumps(data, indent=2), styles["Normal"]))
+            return flows
+
         try:
             doc = SimpleDocTemplate(
-                str(out_path), pagesize=letter,
-                leftMargin=0.75 * inch, rightMargin=0.75 * inch,
-                topMargin=1 * inch, bottomMargin=1 * inch,
+                str(out_path),
+                pagesize=letter,
+                leftMargin=0.75 * inch,
+                rightMargin=0.75 * inch,
+                topMargin=1 * inch,
+                bottomMargin=1 * inch,
             )
+
             styles = getSampleStyleSheet()
-            styles.add(ParagraphStyle("DocTitle", parent=styles["Heading1"], fontSize=24, leading=28, spaceAfter=24))
-            styles.add(ParagraphStyle("Section", parent=styles["Heading2"], fontSize=16, leading=20, spaceBefore=12, spaceAfter=6))
+            styles.add(
+                ParagraphStyle(
+                    "DocTitle",
+                    parent=styles["Heading1"],
+                    fontSize=28,
+                    leading=32,
+                    alignment=1,
+                    spaceAfter=24,
+                )
+            )
+            styles.add(
+                ParagraphStyle(
+                    "Subtitle",
+                    parent=styles["Heading2"],
+                    fontSize=16,
+                    leading=20,
+                    alignment=1,
+                    textColor=colors.grey,
+                    spaceAfter=48,
+                )
+            )
+            styles.add(
+                ParagraphStyle(
+                    "Section",
+                    parent=styles["Heading2"],
+                    fontSize=18,
+                    leading=22,
+                    textColor=colors.darkblue,
+                    spaceBefore=12,
+                    spaceAfter=8,
+                )
+            )
+            styles.add(
+                ParagraphStyle(
+                    "SubHeading",
+                    parent=styles["Heading3"],
+                    fontSize=14,
+                    leading=18,
+                    spaceBefore=6,
+                    spaceAfter=4,
+                )
+            )
             styles["Normal"].fontSize = 11
             styles["Normal"].leading = 14
 
-            story = [Paragraph(project.name, styles["DocTitle"])]
+            story: List[Any] = [
+                Paragraph(project.name, styles["DocTitle"]),
+                Paragraph(project.description, styles["Subtitle"]),
+                PageBreak(),
+            ]
+
             for role, content in self.results.items():
-                story.append(PageBreak())
                 story.append(Paragraph(f"{role} Analysis", styles["Section"]))
-                story.append(Preformatted(json.dumps(content, indent=2), styles["Normal"]))
-                story.append(Spacer(1, 12))
+                story.extend(to_flowables(content))
+                story.append(PageBreak())
+
+            # Remove last page break for cleaner output
+            if story and isinstance(story[-1], PageBreak):
+                story.pop()
 
             doc.build(story, onFirstPage=draw_border, onLaterPages=draw_border)
-            logger.info(f"PDF exported to {out_path}")
+            logger.info("PDF exported to %s", out_path)
         except Exception as e:
-            logger.exception(f"Failed to export PDF: {e}")
+            logger.exception("Failed to export PDF: %s", e)
             raise
 
 
