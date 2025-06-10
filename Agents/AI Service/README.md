@@ -2,10 +2,6 @@
 
 An AI application that simulates a full-service digital agency using multiple AI agents to analyze and plan software projects. Each agent represents a different role in the project lifecycle, from strategic planning to technical implementation.
 
-## Demo: 
-
-https://github.com/user-attachments/assets/a0befa3a-f4c3-400d-9790-4b9e37254405
-
 ## Features
 
 ### Five specialized AI agents 
@@ -54,27 +50,3 @@ The agency operates in async mode, enabling:
 - CTO ↔️ Developer (Technical Implementation)
 - Product Manager ↔️ Marketing Manager (Go-to-Market Strategy)
 - Product Manager ↔️ Developer (Feature Implementation)
-- (and more!)
-
-## How to Run
-
-Follow the steps below to set up and run the application:
-Before anything else, Please get your OpenAI API Key here: https://platform.openai.com/api-keys
-
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/Shubhamsaboo/awesome-llm-apps.git
-   cd advanced_ai_agents/multi_agent_apps/agent_teams/ai_services_agency
-   ```
-
-2. **Install the dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3. **Run the Streamlit app**:
-    ```bash
-    streamlit run ai_services_agency/agency.py
-    ```
-
-4. **Enter your OpenAI API Key** in the sidebar when prompted and start analyzing your startup idea!
