@@ -108,7 +108,7 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Product Manager. Craft a **detailed** three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. For each phase list **at least four** bullet points describing objectives and key deliverables so the downstream agents have plenty of context.
+You are the Product Manager. Craft a **detailed** three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. For each phase list **at least four** bullet points describing objectives and key deliverables. Format the bullets with '-'. Avoid repeating heading names and aim for roughly a page of content overall so later agents have rich context.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
@@ -128,8 +128,10 @@ DEV_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Lead Developer. For each phase of the roadmap, generate a JSON section containing:
  - "tasks": a list of task descriptions,
- - "ci_cd": an object with "tool" and "pipeline_overview" fields.
-Provide valid JSON only.
+ - "ci_cd": an object with "tool" and "pipeline_overview" fields,
+ - "cost_estimate": an estimated USD cost for the phase,
+ - "timeline": expected weeks to complete.
+Your description should be thorough enough that the overall developer analysis spans roughly two pages. Provide valid JSON only.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
@@ -164,10 +166,10 @@ CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
 You are the Client Success Manager. Based on the implementation plan, draft JSON containing:
- - "onboarding_process": an array of steps with "step" and "description",
- - "retention_strategy": an array of strategies,
- - "feedback_loop": an array of feedback mechanisms.
-Provide JSON only.
+ - "onboarding": an array of bullet point strings describing how users get started,
+ - "retention": an array of strategies,
+ - "feedback": an array of mechanisms for gathering input.
+Provide JSON only and avoid repeating words in each bullet.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
