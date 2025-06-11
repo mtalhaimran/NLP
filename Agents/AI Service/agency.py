@@ -60,17 +60,22 @@ def draw_border(canvas, doc):
     canvas.rect(x, y, width, height, stroke=1, fill=0)
     canvas.restoreState()
 
-# ─── PROMPT TEMPLATES ──────────────────────────────────────────────────
+# 1. Chief Strategy Officer: Go/No-Go analysis
 CEO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Chief Strategy Officer. Given the project data, perform a detailed Go/No-Go analysis. Provide output strictly as JSON matching this schema:
-{{
-  "decision": "<GO|NO_GO>",
-  "key_risks": [ "risk1", "risk2", "risk3" ],
-  "opportunities": [ "op1", "op2", "op3" ],
-  "recommendations": [ {{ "title": "Recommendation title", "detail": "Recommendation detail" }} ]
-}}
+You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis. 
+Generate a structured JSON response matching this schema, including section titles of your choice:
+{
+  "decision": "<GO or NO_GO>",
+  "key_risks": ["risk1", "risk2", ...],
+  "opportunities": ["op1", "op2", ...],
+  "recommendations": [
+    {"title": "<Recommendation title>", "detail": "<Recommendation detail>"},
+    ...
+  ]
+}
+Respond only with valid JSON. No additional commentary.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
@@ -78,20 +83,21 @@ Project Data:
 ```json
 {project}
 ```
-Respond only with the JSON above, without additional commentary.
+Respond strictly in the JSON format specified.
 '''    ),
 ])
 
+# 2. Chief Technology Officer: System architecture proposal
 CTO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the CTO. Based on the project data and CEO analysis, propose a robust system architecture and technology stack. Your response should include:
-1. A bulleted list describing the overall architecture.
-2. A JSON object with keys:
-   "architecture": "<brief description>",
-   "components": [ {{ "name": "<component name>", "purpose": "<component purpose>" }} ],
-   "scalability_plan": "<how the system will scale>"
-'''    ),
+You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack. 
+Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. 
+Include one JSON object with keys:
+- "architecture": brief summary
+- "components": list of {"name":..., "purpose":...}
+- "scalability_plan": description
+Respond with a bulleted summary plus the JSON block.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Project Data:
@@ -105,11 +111,12 @@ CEO Analysis:
     ),
 ])
 
+# 3. Product Manager: Phased roadmap
 PM_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Product Manager. Craft a detailed three-phase roadmap using Markdown. Use H2 headers: '## MVP', '## Growth', and '## Scale'. Under each header, include bullet points for objectives and key deliverables.
-'''    ),
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") as you see fit, and under each phase include bullet points for objectives and deliverables.
+Use Markdown for structure but choose your own headings.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Project Data:
@@ -123,29 +130,30 @@ CTO Specification:
     ),
 ])
 
+# 4. Lead Developer: Task and CI/CD plan
 DEV_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Lead Developer. For each phase of the roadmap, generate a JSON section containing:
- - "tasks": a list of task descriptions,
- - "ci_cd": an object with "tool" and "pipeline_overview" fields.
-Provide valid JSON only.
-'''    ),
+You are the Lead Developer. For each roadmap phase, generate a JSON section containing:
+- "tasks": list of task descriptions
+- "ci_cd": object with fields "tool" and "pipeline_overview"
+Let the model assign its own phase labels based on the roadmap headings. Provide valid JSON only.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Roadmap:
 ```markdown
 {PM}
 ```
-'''    ),
+```'''
+    ),
 ])
 
+# 5. Marketing Manager: Go-to-market plan
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Marketing Manager. Using the product roadmap, craft a concise go-to-market plan. Include bullet points for target audience, primary channels, and messaging themes.
-'''
-    ),
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. 
+Include sections (with titles you generate) covering target audience, channels, and messaging themes. Use bullet points.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Project Data:
@@ -156,19 +164,19 @@ Roadmap:
 ```markdown
 {PM}
 ```
-'''
+```'''
     ),
 ])
 
+# 6. Client Success Manager: Onboarding and retention
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Client Success Manager. Based on the implementation plan, draft JSON containing:
- - "onboarding_process": an array of steps with "step" and "description",
- - "retention_strategy": an array of strategies,
- - "feedback_loop": an array of feedback mechanisms.
-Provide JSON only.
-'''    ),
+You are the Client Success Manager. From the implementation details, draft JSON with keys:
+- "onboarding_process": array of {"step":..., "description":...}
+- "retention_strategy": array of strategies
+- "feedback_loop": array of feedback mechanisms
+Allow the model to name each section. Provide JSON only.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Implementation Details:
@@ -177,7 +185,6 @@ Implementation Details:
 ```'''
     ),
 ])
-
 # ─── AGENT & PIPELINE ─────────────────────────────────────────────────
 class Agent:
     """Wraps a role-based LLM agent with prompt and model."""
