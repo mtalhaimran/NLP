@@ -60,6 +60,7 @@ def draw_border(canvas, doc):
     canvas.rect(x, y, width, height, stroke=1, fill=0)
     canvas.restoreState()
 
+# ─── PROMPT TEMPLATES ──────────────────────────────────────────────────
 # 1. Chief Strategy Officer: Go/No-Go analysis
 CEO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
@@ -185,6 +186,7 @@ Implementation Details:
 ```'''
     ),
 ])
+
 # ─── AGENT & PIPELINE ─────────────────────────────────────────────────
 class Agent:
     """Wraps a role-based LLM agent with prompt and model."""
