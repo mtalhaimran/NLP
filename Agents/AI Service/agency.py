@@ -65,7 +65,7 @@ def draw_border(canvas, doc):
 CEO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis. 
+You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
 Generate a structured JSON response matching this schema, including section titles of your choice:
 {
   "decision": "<GO or NO_GO>",
@@ -76,7 +76,8 @@ Generate a structured JSON response matching this schema, including section titl
     ...
   ]
 }
-Respond only with valid JSON. No additional commentary.
+Start your response with "{" and return only valid JSON matching this schema.
+No additional commentary.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
