@@ -65,18 +65,19 @@ def draw_border(canvas, doc):
 CEO_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis. 
+You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
 Generate a structured JSON response matching this schema, including section titles of your choice:
-{
+{{
   "decision": "<GO or NO_GO>",
   "key_risks": ["risk1", "risk2", ...],
   "opportunities": ["op1", "op2", ...],
   "recommendations": [
-    {"title": "<Recommendation title>", "detail": "<Recommendation detail>"},
+    {{"title": "<Recommendation title>", "detail": "<Recommendation detail>"}},
     ...
   ]
-}
-Respond only with valid JSON. No additional commentary.
+}}
+Start your response with "{{" and return only valid JSON matching this schema.
+No additional commentary.
 '''    ),
     HumanMessagePromptTemplate.from_template(
         '''
@@ -96,7 +97,7 @@ You are the CTO. Using the project data and the CEO's analysis, propose a system
 Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. 
 Include one JSON object with keys:
 - "architecture": brief summary
-- "components": list of {"name":..., "purpose":...}
+ - "components": list of {{"name":..., "purpose":...}}
 - "scalability_plan": description
 Respond with a bulleted summary plus the JSON block.'''    ),
     HumanMessagePromptTemplate.from_template(
@@ -174,7 +175,7 @@ CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
 You are the Client Success Manager. From the implementation details, draft JSON with keys:
-- "onboarding_process": array of {"step":..., "description":...}
+ - "onboarding_process": array of {{"step":..., "description":...}}
 - "retention_strategy": array of strategies
 - "feedback_loop": array of feedback mechanisms
 Allow the model to name each section. Provide JSON only.'''    ),
