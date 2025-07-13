@@ -141,7 +141,7 @@ Respond only with valid JSON using this structure:
   }},
   ...
 }}
-Start your reply with "{" and ensure it is valid JSON.'''    ),
+Start your reply with "{{" and ensure it is valid JSON.'''    ),
     human_prompt(
         '''
 Project Data:
@@ -185,7 +185,7 @@ Respond only with JSON having the keys:
   "channels": ["channel1", ...],
   "messaging": ["theme1", ...]
 }}
-Start your reply with "{" and ensure it is valid JSON.'''    ),
+Start your reply with "{{" and ensure it is valid JSON.'''    ),
     human_prompt(
         '''
 Project Data:
