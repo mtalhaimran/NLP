@@ -1,12 +1,12 @@
 import streamlit as st
 import requests
+import time
 from agno.agent import Agent
-from agno.tools.firecrawl import FirecrawlTools
-from agno.models.openai import OpenAIChat
+from langchain_community.chat_models import ChatHuggingFaceHub
 from firecrawl import FirecrawlApp
 from pydantic import BaseModel, Field
 from typing import List
-from composio_phidata import Action, ComposioToolSet
+import pandas as pd
 import json
 
 class QuoraUserInteractionSchema(BaseModel):
@@ -89,42 +89,19 @@ def format_user_info_to_flattened_json(user_info_list: List[dict]) -> List[dict]
     
     return flattened_data
 
-def create_google_sheets_agent(composio_api_key: str, openai_api_key: str) -> Agent:
-    composio_toolset = ComposioToolSet(api_key=composio_api_key)
-    google_sheets_tool = composio_toolset.get_tools(actions=[Action.GOOGLESHEETS_SHEET_FROM_JSON])[0]
-    
-    google_sheets_agent = Agent(
-        model=OpenAIChat(id="gpt-4o-mini", api_key=openai_api_key),
-        tools=[google_sheets_tool],
-        show_tool_calls=True,
-        system_prompt="You are an expert at creating and updating Google Sheets. You will be given user information in JSON format, and you need to write it into a new Google Sheet.",
-        markdown=True
-    )
-    return google_sheets_agent
-
-def write_to_google_sheets(flattened_data: List[dict], composio_api_key: str, openai_api_key: str) -> str:
-    google_sheets_agent = create_google_sheets_agent(composio_api_key, openai_api_key)
-    
+def write_to_excel(flattened_data: List[dict]) -> str:
+    """Write the flattened user data to a local Excel file and return the file path."""
+    df = pd.DataFrame(flattened_data)
+    filename = f"leads_{int(time.time())}.xlsx"
     try:
-        message = (
-            "Create a new Google Sheet with this data. "
-            "The sheet should have these columns: Website URL, Username, Bio, Post Type, Timestamp, Upvotes, and Links in the same order as mentioned. "
-            "Here's the data in JSON format:\n\n"
-            f"{json.dumps(flattened_data, indent=2)}"
-        )
-        
-        create_sheet_response = google_sheets_agent.run(message)
-        
-        if "https://docs.google.com/spreadsheets/d/" in create_sheet_response.content:
-            google_sheets_link = create_sheet_response.content.split("https://docs.google.com/spreadsheets/d/")[1].split(" ")[0]
-            return f"https://docs.google.com/spreadsheets/d/{google_sheets_link}"
+        df.to_excel(filename, index=False)
+        return filename
     except Exception:
-        pass
-    return None
+        return None
 
-def create_prompt_transformation_agent(openai_api_key: str) -> Agent:
+def create_prompt_transformation_agent(huggingface_api_key: str) -> Agent:
     return Agent(
-        model=OpenAIChat(id="gpt-4o-mini", api_key=openai_api_key),
+        model=ChatHuggingFaceHub(repo_id="mistralai/Mistral-7B-Instruct-v0.1", huggingfacehub_api_token=huggingface_api_key),
         system_prompt="""You are an expert at transforming detailed user queries into concise company descriptions.
 Your task is to extract the core business/product focus in 3-4 words.
 
@@ -153,10 +130,8 @@ def main():
         st.header("API Keys")
         firecrawl_api_key = st.text_input("Firecrawl API Key", type="password")
         st.caption(" Get your Firecrawl API key from [Firecrawl's website](https://www.firecrawl.dev/app/api-keys)")
-        openai_api_key = st.text_input("OpenAI API Key", type="password")
-        st.caption(" Get your OpenAI API key from [OpenAI's website](https://platform.openai.com/api-keys)")
-        composio_api_key = st.text_input("Composio API Key", type="password")
-        st.caption(" Get your Composio API key from [Composio's website](https://composio.ai)")
+        huggingface_api_key = st.text_input("HuggingFace API Key", type="password")
+        st.caption(" Get your HuggingFace API key from [HuggingFace's website](https://huggingface.co/settings/tokens)")
         
         num_links = st.number_input("Number of links to search", min_value=1, max_value=10, value=3)
         
@@ -171,11 +146,11 @@ def main():
     )
 
     if st.button("Generate Leads"):
-        if not all([firecrawl_api_key, openai_api_key, composio_api_key, user_query]):
+        if not all([firecrawl_api_key, huggingface_api_key, user_query]):
             st.error("Please fill in all the API keys and describe what leads you're looking for.")
         else:
             with st.spinner("Processing your query..."):
-                transform_agent = create_prompt_transformation_agent(openai_api_key)
+                transform_agent = create_prompt_transformation_agent(huggingface_api_key)
                 company_description = transform_agent.run(f"Transform this query into a concise 3-4 word company description: {user_query}")
                 st.write("🎯 Searching for:", company_description.content)
             
@@ -193,15 +168,15 @@ def main():
                 with st.spinner("Formatting user info..."):
                     flattened_data = format_user_info_to_flattened_json(user_info_list)
                 
-                with st.spinner("Writing to Google Sheets..."):
-                    google_sheets_link = write_to_google_sheets(flattened_data, composio_api_key, openai_api_key)
-                
-                if google_sheets_link:
-                    st.success("Lead generation and data writing to Google Sheets completed successfully!")
-                    st.subheader("Google Sheets Link:")
-                    st.markdown(f"[View Google Sheet]({google_sheets_link})")
+                with st.spinner("Writing to Excel file..."):
+                    excel_file = write_to_excel(flattened_data)
+
+                if excel_file:
+                    st.success("Lead generation completed and data written to Excel file successfully!")
+                    st.subheader("Excel File:")
+                    st.markdown(f"Generated file: {excel_file}")
                 else:
-                    st.error("Failed to retrieve the Google Sheets link.")
+                    st.error("Failed to create the Excel file.")
             else:
                 st.warning("No relevant URLs found.")
 
