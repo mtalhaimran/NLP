@@ -24,7 +24,21 @@ from langchain.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
+    PromptTemplate,
 )
+
+def system_prompt(template: str) -> SystemMessagePromptTemplate:
+    """Compatibility wrapper for SystemMessagePromptTemplate.from_template."""
+    if hasattr(SystemMessagePromptTemplate, "from_template"):
+        return SystemMessagePromptTemplate.from_template(template)
+    return SystemMessagePromptTemplate(prompt=PromptTemplate.from_template(template))
+
+
+def human_prompt(template: str) -> HumanMessagePromptTemplate:
+    """Compatibility wrapper for HumanMessagePromptTemplate.from_template."""
+    if hasattr(HumanMessagePromptTemplate, "from_template"):
+        return HumanMessagePromptTemplate.from_template(template)
+    return HumanMessagePromptTemplate(prompt=PromptTemplate.from_template(template))
 from langchain_ollama import ChatOllama
 
 # ─── CONFIGURATION ────────────────────────────────────────────────────
@@ -63,7 +77,7 @@ def draw_border(canvas, doc):
 # ─── PROMPT TEMPLATES ──────────────────────────────────────────────────
 # 1. Chief Strategy Officer: Go/No-Go analysis
 CEO_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
+    system_prompt(
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
 Generate a structured JSON response matching this schema, including section titles of your choice:
@@ -79,7 +93,7 @@ Generate a structured JSON response matching this schema, including section titl
 Start your response with "{{" and return only valid JSON matching this schema.
 No additional commentary.
 '''    ),
-    HumanMessagePromptTemplate.from_template(
+    human_prompt(
         '''
 Project Data:
 ```json
@@ -91,7 +105,7 @@ Respond strictly in the JSON format specified.
 
 # 2. Chief Technology Officer: System architecture proposal
 CTO_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
+    system_prompt(
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack. 
 Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. 
@@ -100,7 +114,7 @@ Include one JSON object with keys:
  - "components": list of {{"name":..., "purpose":...}}
 - "scalability_plan": description
 Respond with a bulleted summary plus the JSON block.'''    ),
-    HumanMessagePromptTemplate.from_template(
+    human_prompt(
         '''
 Project Data:
 ```json
@@ -115,7 +129,7 @@ CEO Analysis:
 
 # 3. Product Manager: Phased roadmap
 PM_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
+    system_prompt(
         '''
 You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables.
 Respond only with valid JSON using this structure:
@@ -127,7 +141,7 @@ Respond only with valid JSON using this structure:
   ...
 }
 Start your reply with "{" and ensure it is valid JSON.'''    ),
-    HumanMessagePromptTemplate.from_template(
+    human_prompt(
         '''
 Project Data:
 ```json
@@ -142,13 +156,13 @@ CTO Specification:
 
 # 4. Lead Developer: Task and CI/CD plan
 DEV_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
+    system_prompt(
         '''
 You are the Lead Developer. For each roadmap phase, generate a JSON section containing:
 - "tasks": list of task descriptions
 - "ci_cd": object with fields "tool" and "pipeline_overview"
 Let the model assign its own phase labels based on the roadmap headings. Provide valid JSON only.'''    ),
-    HumanMessagePromptTemplate.from_template(
+    human_prompt(
         '''
 Roadmap:
 ```markdown
@@ -160,7 +174,7 @@ Roadmap:
 
 # 5. Marketing Manager: Go-to-market plan
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
+    system_prompt(
         '''
 You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
 Respond only with JSON having the keys:
@@ -170,7 +184,7 @@ Respond only with JSON having the keys:
   "messaging": ["theme1", ...]
 }
 Start your reply with "{" and ensure it is valid JSON.'''    ),
-    HumanMessagePromptTemplate.from_template(
+    human_prompt(
         '''
 Project Data:
 ```json
@@ -186,14 +200,14 @@ Roadmap:
 
 # 6. Client Success Manager: Onboarding and retention
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(
+    system_prompt(
         '''
 You are the Client Success Manager. From the implementation details, draft JSON with keys:
  - "onboarding_process": array of {{"step":..., "description":...}}
 - "retention_strategy": array of strategies
 - "feedback_loop": array of feedback mechanisms
 Allow the model to name each section. Provide JSON only.'''    ),
-    HumanMessagePromptTemplate.from_template(
+    human_prompt(
         '''
 Implementation Details:
 ```json
