@@ -3,5 +3,4 @@ langchain_community
 playwright
 pandas
 openpyxl
-pydantic==2.10.5
 streamlit

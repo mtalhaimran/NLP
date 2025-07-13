@@ -4,22 +4,10 @@ from langchain_community.chat_models import ChatOllama
 from langchain_community.document_loaders import PlaywrightURLLoader
 from langchain.chains import LLMChain
 from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
 from typing import List
 import pandas as pd
 import json
 
-class QuoraUserInteractionSchema(BaseModel):
-    username: str = Field(description="The username of the user who posted the question or answer")
-    bio: str = Field(description="The bio or description of the user")
-    post_type: str = Field(description="The type of post, either 'question' or 'answer'")
-    timestamp: str = Field(description="When the question or answer was posted")
-    upvotes: int = Field(default=0, description="Number of upvotes received")
-    links: List[str] = Field(default_factory=list, description="Any links included in the post")
-
-class QuoraPageSchema(BaseModel):
-    interactions: List[QuoraUserInteractionSchema] = Field(description="List of all user interactions (questions and answers) on the page")
 
 def search_for_urls(company_description: str, num_links: int) -> List[str]:
     query = f"site:quora.com {company_description}"
@@ -33,10 +21,17 @@ def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
 
     llm = ChatOllama(model="mistral:7b-instruct")
 
-    parser = PydanticOutputParser(pydantic_object=QuoraPageSchema)
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "Extract all user interactions from this Quora page. {format_instructions}"),
+            (
+                "system",
+                (
+                    "Extract all user interactions from this Quora page as JSON. "
+                    "Return a dictionary with an 'interactions' key containing a list "
+                    "of objects with 'username', 'bio', 'post_type', 'timestamp', "
+                    "'upvotes' and 'links'."
+                ),
+            ),
             ("human", "{page_content}"),
         ]
     )
@@ -44,16 +39,14 @@ def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
 
     for url, doc in zip(urls, docs):
         try:
-            result = chain.predict(
-                page_content=doc.page_content,
-                format_instructions=parser.get_format_instructions(),
-            )
-            parsed = parser.parse(result)
-            if parsed.interactions:
+            result = chain.predict(page_content=doc.page_content)
+            parsed = json.loads(result)
+            interactions = parsed.get("interactions", [])
+            if interactions:
                 user_info_list.append(
                     {
                         "website_url": url,
-                        "user_info": [i.dict() for i in parsed.interactions],
+                        "user_info": interactions,
                     }
                 )
         except Exception:
