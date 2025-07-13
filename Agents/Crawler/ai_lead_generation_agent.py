@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import time
 from agno.agent import Agent
-from langchain_community.chat_models import ChatHuggingFaceHub
+from langchain_community.chat_models.huggingface import ChatHuggingFaceHub
 from firecrawl import FirecrawlApp
 from pydantic import BaseModel, Field
 from typing import List
