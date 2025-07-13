@@ -1,5 +1,5 @@
 import streamlit as st
-from duckduckgo_search import ddg
+from duckduckgo_search import DDGS
 from langchain_community.chat_models import ChatOllama
 from langchain_community.document_loaders import PlaywrightURLLoader
 from langchain.chains import LLMChain
@@ -11,8 +11,9 @@ import json
 
 def search_for_urls(company_description: str, num_links: int) -> List[str]:
     query = f"site:quora.com {company_description}"
-    results = ddg(query, max_results=num_links) or []
-    return [r.get("href") for r in results if r.get("href")]
+    with DDGS() as ddgs:
+        results = ddgs.text(query, max_results=num_links) or []
+    return [r.get("href") or r.get("url") for r in results if r.get("href") or r.get("url")]
 
 def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
     user_info_list = []
