@@ -1,4 +1,10 @@
 python-dotenv==1.0.1
 agency-swarm==0.4.1
 streamlit
+langchain
+langchain_community
+langchain_ollama
+pydantic
+typer
+reportlab
 
