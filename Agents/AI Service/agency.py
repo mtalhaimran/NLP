@@ -123,7 +123,8 @@ Project Data:
 CEO Analysis:
 ```json
 {CEO}
-```'''
+```
+'''
     ),
 ])
 
@@ -133,13 +134,13 @@ PM_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables.
 Respond only with valid JSON using this structure:
-{
-  "<PhaseName>": {
+{{
+  "<PhaseName>": {{
     "objectives": ["objective1", ...],
     "deliverables": ["deliverable1", ...]
-  },
+  }},
   ...
-}
+}}
 Start your reply with "{" and ensure it is valid JSON.'''    ),
     human_prompt(
         '''
@@ -150,7 +151,8 @@ Project Data:
 CTO Specification:
 ```json
 {CTO}
-```'''
+```
+'''
     ),
 ])
 
@@ -168,7 +170,7 @@ Roadmap:
 ```markdown
 {PM}
 ```
-```'''
+'''
     ),
 ])
 
@@ -178,11 +180,11 @@ MARKETING_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
 Respond only with JSON having the keys:
-{
+{{
   "target_audience": ["audience1", ...],
   "channels": ["channel1", ...],
   "messaging": ["theme1", ...]
-}
+}}
 Start your reply with "{" and ensure it is valid JSON.'''    ),
     human_prompt(
         '''
@@ -194,7 +196,7 @@ Roadmap:
 ```markdown
 {PM}
 ```
-```'''
+'''
     ),
 ])
 
@@ -212,7 +214,8 @@ Allow the model to name each section. Provide JSON only.'''    ),
 Implementation Details:
 ```json
 {DEV}
-```'''
+```
+'''
     ),
 ])
 
