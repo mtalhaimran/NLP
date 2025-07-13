@@ -3,6 +3,7 @@ import requests
 from agno.agent import Agent
 from agno.tools.firecrawl import FirecrawlTools
 from agno.models.openai import OpenAIChat
+from langchain_community.chat_models.huggingface import ChatHuggingFace
 from firecrawl import FirecrawlApp
 from pydantic import BaseModel, Field
 from typing import List
@@ -122,9 +123,9 @@ def write_to_google_sheets(flattened_data: List[dict], composio_api_key: str, op
         pass
     return None
 
-def create_prompt_transformation_agent(openai_api_key: str) -> Agent:
+def create_prompt_transformation_agent(repo_id: str) -> Agent:
     return Agent(
-        model=OpenAIChat(id="gpt-4o-mini", api_key=openai_api_key),
+        model=ChatHuggingFace(repo_id=repo_id),
         system_prompt="""You are an expert at transforming detailed user queries into concise company descriptions.
 Your task is to extract the core business/product focus in 3-4 words.
 
@@ -155,6 +156,7 @@ def main():
         st.caption(" Get your Firecrawl API key from [Firecrawl's website](https://www.firecrawl.dev/app/api-keys)")
         openai_api_key = st.text_input("OpenAI API Key", type="password")
         st.caption(" Get your OpenAI API key from [OpenAI's website](https://platform.openai.com/api-keys)")
+        repo_id = st.text_input("HuggingFace Repo ID")
         composio_api_key = st.text_input("Composio API Key", type="password")
         st.caption(" Get your Composio API key from [Composio's website](https://composio.ai)")
         
@@ -175,7 +177,7 @@ def main():
             st.error("Please fill in all the API keys and describe what leads you're looking for.")
         else:
             with st.spinner("Processing your query..."):
-                transform_agent = create_prompt_transformation_agent(openai_api_key)
+                transform_agent = create_prompt_transformation_agent(repo_id)
                 company_description = transform_agent.run(f"Transform this query into a concise 3-4 word company description: {user_query}")
                 st.write("🎯 Searching for:", company_description.content)
             
