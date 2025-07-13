@@ -1,5 +1,7 @@
-agno
-composio-phidata
-composio==0.1.1
+duckduckgo_search
+langchain_community
+playwright
+pandas
+openpyxl
 pydantic==2.10.5
 streamlit
