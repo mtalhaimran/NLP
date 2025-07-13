@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 from agno.agent import Agent
-from agno.tools.firecrawl import FirecrawlTools
 from agno.models.openai import OpenAIChat
 from langchain_community.chat_models.huggingface import ChatHuggingFace
 from firecrawl import FirecrawlApp
