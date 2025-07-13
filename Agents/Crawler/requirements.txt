@@ -1,6 +1,7 @@
 duckduckgo_search
 langchain_community
-playwright
 pandas
 openpyxl
+requests
+beautifulsoup4
 streamlit

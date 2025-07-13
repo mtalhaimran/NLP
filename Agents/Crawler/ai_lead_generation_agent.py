@@ -1,12 +1,13 @@
 import streamlit as st
 from duckduckgo_search import DDGS
 from langchain_community.chat_models import ChatOllama
-from langchain_community.document_loaders import PlaywrightURLLoader
 from langchain.chains import LLMChain
 from langchain.prompts import ChatPromptTemplate
 from typing import List
 import pandas as pd
 import json
+import requests
+from bs4 import BeautifulSoup
 
 
 def search_for_urls(company_description: str, num_links: int) -> List[str]:
@@ -15,10 +16,17 @@ def search_for_urls(company_description: str, num_links: int) -> List[str]:
         results = ddgs.text(query, max_results=num_links) or []
     return [r.get("href") or r.get("url") for r in results if r.get("href") or r.get("url")]
 
+
+def load_page_text(url: str) -> str:
+    """Fetch page HTML and return plain text."""
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    return soup.get_text(separator=" ", strip=True)
+
 def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
     user_info_list = []
-    loader = PlaywrightURLLoader(urls, continue_on_failure=True)
-    docs = loader.load()
 
     llm = ChatOllama(model="mistral:7b-instruct")
 
@@ -38,9 +46,10 @@ def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
     )
     chain = LLMChain(llm=llm, prompt=prompt)
 
-    for url, doc in zip(urls, docs):
+    for url in urls:
         try:
-            result = chain.predict(page_content=doc.page_content)
+            page_content = load_page_text(url)
+            result = chain.predict(page_content=page_content)
             parsed = json.loads(result)
             interactions = parsed.get("interactions", [])
             if interactions:
