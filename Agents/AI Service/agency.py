@@ -117,8 +117,16 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") as you see fit, and under each phase include bullet points for objectives and deliverables.
-Use Markdown for structure but choose your own headings.'''    ),
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables.
+Respond only with valid JSON using this structure:
+{
+  "<PhaseName>": {
+    "objectives": ["objective1", ...],
+    "deliverables": ["deliverable1", ...]
+  },
+  ...
+}
+Start your reply with "{" and ensure it is valid JSON.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Project Data:
@@ -154,8 +162,14 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(
         '''
-You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. 
-Include sections (with titles you generate) covering target audience, channels, and messaging themes. Use bullet points.'''    ),
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
+Respond only with JSON having the keys:
+{
+  "target_audience": ["audience1", ...],
+  "channels": ["channel1", ...],
+  "messaging": ["theme1", ...]
+}
+Start your reply with "{" and ensure it is valid JSON.'''    ),
     HumanMessagePromptTemplate.from_template(
         '''
 Project Data:
