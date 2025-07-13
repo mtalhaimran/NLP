@@ -1,9 +1,11 @@
 import streamlit as st
-import requests
 from agno.agent import Agent
-from agno.tools.firecrawl import FirecrawlTools
-from agno.models.openai import OpenAIChat
-from firecrawl import FirecrawlApp
+from duckduckgo_search import ddg
+from langchain_community.chat_models.huggingface import ChatHuggingFaceHub
+from langchain_community.document_loaders import PlaywrightURLLoader
+from langchain.chains import LLMChain
+from langchain.prompts import ChatPromptTemplate
+from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
 from composio_phidata import Action, ComposioToolSet
@@ -20,52 +22,48 @@ class QuoraUserInteractionSchema(BaseModel):
 class QuoraPageSchema(BaseModel):
     interactions: List[QuoraUserInteractionSchema] = Field(description="List of all user interactions (questions and answers) on the page")
 
-def search_for_urls(company_description: str, firecrawl_api_key: str, num_links: int) -> List[str]:
-    url = "https://api.firecrawl.dev/v1/search"
-    headers = {
-        "Authorization": f"Bearer {firecrawl_api_key}",
-        "Content-Type": "application/json"
-    }
-    query1 = f"quora websites where people are looking for {company_description} services"
-    payload = {
-        "query": query1,
-        "limit": num_links,
-        "lang": "en",
-        "location": "United States",
-        "timeout": 60000,
-    }
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("success"):
-            results = data.get("data", [])
-            return [result["url"] for result in results]
-    return []
+def search_for_urls(company_description: str, num_links: int) -> List[str]:
+    query = f"site:quora.com {company_description}"
+    results = ddg(query, max_results=num_links) or []
+    return [r.get("href") for r in results if r.get("href")]
 
-def extract_user_info_from_urls(urls: List[str], firecrawl_api_key: str) -> List[dict]:
+def extract_user_info_from_urls(urls: List[str], hf_api_token: str) -> List[dict]:
     user_info_list = []
-    firecrawl_app = FirecrawlApp(api_key=firecrawl_api_key)
-    
-    try:
-        for url in urls:
-            response = firecrawl_app.extract(
-                [url],
-                {
-                    'prompt': 'Extract all user information including username, bio, post type (question/answer), timestamp, upvotes, and any links from Quora posts. Focus on identifying potential leads who are asking questions or providing answers related to the topic.',
-                    'schema': QuoraPageSchema.model_json_schema(),
-                }
+    loader = PlaywrightURLLoader(urls, continue_on_failure=True)
+    docs = loader.load()
+
+    llm = ChatHuggingFaceHub(
+        repo_id="mistralai/Mistral-7B-Instruct-v0.1",
+        model_kwargs={"temperature": 0.0, "max_new_tokens": 512},
+        huggingfacehub_api_token=hf_api_token,
+    )
+
+    parser = PydanticOutputParser(pydantic_object=QuoraPageSchema)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "Extract all user interactions from this Quora page. {format_instructions}"),
+            ("human", "{page_content}"),
+        ]
+    )
+    chain = LLMChain(llm=llm, prompt=prompt)
+
+    for url, doc in zip(urls, docs):
+        try:
+            result = chain.predict(
+                page_content=doc.page_content,
+                format_instructions=parser.get_format_instructions(),
             )
-            
-            if response.get('success') and response.get('status') == 'completed':
-                interactions = response.get('data', {}).get('interactions', [])
-                if interactions:
-                    user_info_list.append({
+            parsed = parser.parse(result)
+            if parsed.interactions:
+                user_info_list.append(
+                    {
                         "website_url": url,
-                        "user_info": interactions
-                    })
-    except Exception:
-        pass
-    
+                        "user_info": [i.dict() for i in parsed.interactions],
+                    }
+                )
+        except Exception:
+            pass
+
     return user_info_list
 
 def format_user_info_to_flattened_json(user_info_list: List[dict]) -> List[dict]:
@@ -89,12 +87,16 @@ def format_user_info_to_flattened_json(user_info_list: List[dict]) -> List[dict]
     
     return flattened_data
 
-def create_google_sheets_agent(composio_api_key: str, openai_api_key: str) -> Agent:
+def create_google_sheets_agent(composio_api_key: str, hf_api_token: str) -> Agent:
     composio_toolset = ComposioToolSet(api_key=composio_api_key)
     google_sheets_tool = composio_toolset.get_tools(actions=[Action.GOOGLESHEETS_SHEET_FROM_JSON])[0]
     
     google_sheets_agent = Agent(
-        model=OpenAIChat(id="gpt-4o-mini", api_key=openai_api_key),
+        model=ChatHuggingFaceHub(
+            repo_id="mistralai/Mistral-7B-Instruct-v0.1",
+            model_kwargs={"temperature": 0.0, "max_new_tokens": 512},
+            huggingfacehub_api_token=hf_api_token,
+        ),
         tools=[google_sheets_tool],
         show_tool_calls=True,
         system_prompt="You are an expert at creating and updating Google Sheets. You will be given user information in JSON format, and you need to write it into a new Google Sheet.",
@@ -102,8 +104,8 @@ def create_google_sheets_agent(composio_api_key: str, openai_api_key: str) -> Ag
     )
     return google_sheets_agent
 
-def write_to_google_sheets(flattened_data: List[dict], composio_api_key: str, openai_api_key: str) -> str:
-    google_sheets_agent = create_google_sheets_agent(composio_api_key, openai_api_key)
+def write_to_google_sheets(flattened_data: List[dict], composio_api_key: str, hf_api_token: str) -> str:
+    google_sheets_agent = create_google_sheets_agent(composio_api_key, hf_api_token)
     
     try:
         message = (
@@ -122,9 +124,13 @@ def write_to_google_sheets(flattened_data: List[dict], composio_api_key: str, op
         pass
     return None
 
-def create_prompt_transformation_agent(openai_api_key: str) -> Agent:
+def create_prompt_transformation_agent(hf_api_token: str) -> Agent:
     return Agent(
-        model=OpenAIChat(id="gpt-4o-mini", api_key=openai_api_key),
+        model=ChatHuggingFaceHub(
+            repo_id="mistralai/Mistral-7B-Instruct-v0.1",
+            model_kwargs={"temperature": 0.0, "max_new_tokens": 512},
+            huggingfacehub_api_token=hf_api_token,
+        ),
         system_prompt="""You are an expert at transforming detailed user queries into concise company descriptions.
 Your task is to extract the core business/product focus in 3-4 words.
 
@@ -147,14 +153,11 @@ Always focus on the core product/service and keep it concise but clear.""",
 
 def main():
     st.title("🎯 AI Lead Generation Agent")
-    st.info("This firecrawl powered agent helps you generate leads from Quora by searching for relevant posts and extracting user information.")
+    st.info("Generate leads from Quora by searching for relevant posts and extracting user information.")
 
     with st.sidebar:
         st.header("API Keys")
-        firecrawl_api_key = st.text_input("Firecrawl API Key", type="password")
-        st.caption(" Get your Firecrawl API key from [Firecrawl's website](https://www.firecrawl.dev/app/api-keys)")
-        openai_api_key = st.text_input("OpenAI API Key", type="password")
-        st.caption(" Get your OpenAI API key from [OpenAI's website](https://platform.openai.com/api-keys)")
+        hf_api_token = st.text_input("HuggingFace API Token", type="password")
         composio_api_key = st.text_input("Composio API Key", type="password")
         st.caption(" Get your Composio API key from [Composio's website](https://composio.ai)")
         
@@ -171,16 +174,16 @@ def main():
     )
 
     if st.button("Generate Leads"):
-        if not all([firecrawl_api_key, openai_api_key, composio_api_key, user_query]):
+        if not all([hf_api_token, composio_api_key, user_query]):
             st.error("Please fill in all the API keys and describe what leads you're looking for.")
         else:
             with st.spinner("Processing your query..."):
-                transform_agent = create_prompt_transformation_agent(openai_api_key)
+                transform_agent = create_prompt_transformation_agent(hf_api_token)
                 company_description = transform_agent.run(f"Transform this query into a concise 3-4 word company description: {user_query}")
                 st.write("🎯 Searching for:", company_description.content)
-            
+
             with st.spinner("Searching for relevant URLs..."):
-                urls = search_for_urls(company_description.content, firecrawl_api_key, num_links)
+                urls = search_for_urls(company_description.content, num_links)
             
             if urls:
                 st.subheader("Quora Links Used:")
@@ -188,13 +191,13 @@ def main():
                     st.write(url)
                 
                 with st.spinner("Extracting user info from URLs..."):
-                    user_info_list = extract_user_info_from_urls(urls, firecrawl_api_key)
+                    user_info_list = extract_user_info_from_urls(urls, hf_api_token)
                 
                 with st.spinner("Formatting user info..."):
                     flattened_data = format_user_info_to_flattened_json(user_info_list)
                 
                 with st.spinner("Writing to Google Sheets..."):
-                    google_sheets_link = write_to_google_sheets(flattened_data, composio_api_key, openai_api_key)
+                    google_sheets_link = write_to_google_sheets(flattened_data, composio_api_key, hf_api_token)
                 
                 if google_sheets_link:
                     st.success("Lead generation and data writing to Google Sheets completed successfully!")

@@ -8,3 +8,13 @@ The AI Lead Generation Agent automates the process of finding and qualifying pot
 - **Automated Processing**: Formats extracted user information into a clean, structured format
 - **Google Sheets Integration**: Automatically creates and populates Google Sheets with lead information
 - **Customizable Criteria**: Allows you to define specific search parameters to find your ideal leads for your niche
+
+### Setup
+
+1. Install the required packages:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. When running the Streamlit app you'll be prompted for a **HuggingFace Repo ID**. Provide the repo for the chat model you would like to use (e.g. `meta-llama/Llama-3-8B-Instruct`).
