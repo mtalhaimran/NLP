@@ -160,10 +160,19 @@ CTO Specification:
 DEV_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Lead Developer. For each roadmap phase, generate a JSON section containing an optional "title" plus:
-- "tasks": list of task descriptions
-- "ci_cd": object with fields "tool" and "pipeline_overview"
-Let the model assign its own phase labels based on the roadmap headings. Provide valid JSON only.'''    ),
+You are the Lead Developer. For each roadmap phase, output a JSON object using markdown-style headings for clarity.
+The schema for each phase is:
+{
+  "phase": "<MVP|Growth|Scale>",
+  "tasks": ["<task1>", ...],
+  "ci_cd_pipeline": {
+    "tool": "<tool name>",
+    "overview": "<pipeline overview>"
+  }
+}
+Return an array of these phase objects. Use the key "ci_cd_pipeline" so the CI/CD details appear once under that heading.
+Provide valid JSON only.'''
+    ),
     human_prompt(
         '''
 Roadmap:
