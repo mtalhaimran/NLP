@@ -1,0 +1,215 @@
+import streamlit as st
+from googlesearch import search
+from langchain_community.chat_models import ChatOllama
+from langchain.chains import LLMChain
+from langchain.prompts import ChatPromptTemplate
+from typing import List
+import pandas as pd
+import json
+import requests
+from bs4 import BeautifulSoup
+import os
+import praw
+
+
+def init_reddit() -> praw.Reddit | None:
+    """Initialize Reddit instance if credentials are available."""
+    client_id = os.getenv("REDDIT_CLIENT_ID")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return None
+    return praw.Reddit(
+        client_id=client_id,
+        client_secret=client_secret,
+        user_agent=os.getenv("REDDIT_USER_AGENT", "lead-gen-app"),
+    )
+
+
+reddit = init_reddit()
+
+
+def search_google_quora(company_description: str, num_links: int) -> List[str]:
+    """Return Quora URLs using Google search."""
+    query = f"site:quora.com {company_description}"
+
+    urls: List[str] = []
+    for url in search(query, num_results=num_links * 2, lang="en"):
+        if "quora.com" in url:
+            urls.append(url)
+        if len(urls) >= num_links:
+            break
+    return urls
+
+
+def search_reddit(company_description: str, limit: int) -> List[str]:
+    """Return Reddit post links using the official API."""
+    if limit <= 0 or reddit is None:
+        return []
+    urls = []
+    for submission in reddit.subreddit("all").search(company_description, limit=limit):
+        urls.append(f"https://www.reddit.com{submission.permalink}")
+        if len(urls) >= limit:
+            break
+    return urls
+
+
+def search_for_urls(company_description: str, num_links: int) -> List[str]:
+    quora_urls = search_google_quora(company_description, num_links // 2)
+    reddit_urls = search_reddit(company_description, num_links - len(quora_urls))
+    combined = quora_urls + reddit_urls
+    return combined[:num_links]
+
+
+def load_page_text(url: str) -> str:
+    """Fetch page HTML and return plain text."""
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    return soup.get_text(separator=" ", strip=True)
+
+def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
+    user_info_list = []
+
+    llm = ChatOllama(model="mistral:7b-instruct")
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
+                    "Extract all user interactions from this page (Quora or Reddit) as JSON. "
+                    "Return a dictionary with an 'interactions' key containing a list "
+                    "of objects with 'username', 'bio', 'post_type', 'timestamp', "
+                    "'upvotes' and 'links'."
+                ),
+            ),
+            ("human", "{page_content}"),
+        ]
+    )
+    chain = LLMChain(llm=llm, prompt=prompt)
+
+    for url in urls:
+        page_data = {"website_url": url, "user_info": []}
+        try:
+            page_content = load_page_text(url)
+            result = chain.predict(page_content=page_content)
+            parsed = json.loads(result)
+            interactions = parsed.get("interactions", [])
+            page_data["user_info"] = interactions
+        except Exception:
+            # Even if extraction fails, keep the URL so the Excel file
+            # lists which pages were processed.
+            pass
+        finally:
+            user_info_list.append(page_data)
+
+    return user_info_list
+
+def format_user_info_to_flattened_json(user_info_list: List[dict]) -> List[dict]:
+    flattened_data = []
+    
+    for info in user_info_list:
+        website_url = info["website_url"]
+        user_info = info.get("user_info") or [{}]
+
+        for interaction in user_info:
+            flattened_interaction = {
+                "Website URL": website_url,
+                "Username": interaction.get("username", ""),
+                "Bio": interaction.get("bio", ""),
+                "Post Type": interaction.get("post_type", ""),
+                "Timestamp": interaction.get("timestamp", ""),
+                "Upvotes": interaction.get("upvotes", 0),
+                "Links": ", ".join(interaction.get("links", [])),
+            }
+            flattened_data.append(flattened_interaction)
+    
+    return flattened_data
+
+
+def write_to_excel(flattened_data: List[dict], path: str) -> None:
+    df = pd.DataFrame(flattened_data)
+    df.to_excel(path, index=False)
+
+
+def transform_query(user_query: str) -> str:
+    llm = ChatOllama(model="mistral:7b-instruct")
+    system_prompt = """You are an expert at transforming detailed user queries into concise company descriptions.
+Your task is to extract the core business/product focus in 3-4 words.
+
+Examples:
+Input: "Generate leads looking for AI-powered customer support chatbots for e-commerce stores."
+Output: "AI customer support chatbots for e commerce"
+
+Input: "Find people interested in voice cloning technology for creating audiobooks and podcasts"
+Output: "voice cloning technology"
+
+Input: "Looking for users who need automated video editing software with AI capabilities"
+Output: "AI video editing software"
+
+Input: "Need to find businesses interested in implementing machine learning solutions for fraud detection"
+Output: "ML fraud detection"
+
+Always focus on the core product/service and keep it concise but clear."""
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{query}"),
+    ])
+    chain = LLMChain(llm=llm, prompt=prompt)
+    return chain.predict(query=user_query).strip()
+
+def main():
+    st.title("🎯 AI Lead Generation Agent")
+    st.info("Generate leads from Quora by searching for relevant posts and extracting user information.")
+
+    with st.sidebar:
+        st.header("Configuration")
+        output_file = st.text_input("Output Excel filename", value="leads.xlsx")
+        num_links = st.number_input("Number of links to search", min_value=1, max_value=10, value=3)
+
+        if st.button("Reset"):
+            st.session_state.clear()
+            st.experimental_rerun()
+
+    user_query = st.text_area(
+        "Describe what kind of leads you're looking for:",
+        placeholder="e.g., Looking for users who need automated video editing software with AI capabilities",
+        help="Be specific about the product/service and target audience. The AI will convert this into a focused search query."
+    )
+
+    if st.button("Generate Leads"):
+        if not all([user_query, output_file]):
+            st.error("Please provide a description and output filename.")
+        else:
+            with st.spinner("Processing your query..."):
+                company_description = transform_query(user_query)
+                st.write("🎯 Searching for:", company_description)
+
+            if reddit is None:
+                st.warning("Reddit credentials not set. Only Quora URLs will be searched.")
+
+            with st.spinner("Searching for relevant URLs..."):
+                urls = search_for_urls(company_description, num_links)
+            
+            if urls:
+                st.subheader("Links Used:")
+                for url in urls:
+                    st.write(url)
+                
+                with st.spinner("Extracting user info from URLs..."):
+                    user_info_list = extract_user_info_from_urls(urls)
+                
+                with st.spinner("Formatting user info..."):
+                    flattened_data = format_user_info_to_flattened_json(user_info_list)
+                
+                with st.spinner("Writing to Excel..."):
+                    write_to_excel(flattened_data, output_file)
+                st.success("Lead generation completed successfully!")
+                st.subheader("Saved File:")
+                st.write(output_file)
+            else:
+                st.warning("No relevant URLs found.")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+        "./Agents/Crawler",
+        "./Agents/AI Service"
+    ]
+}
