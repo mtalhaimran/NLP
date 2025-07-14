@@ -1,5 +1,5 @@
 import streamlit as st
-from duckduckgo_search import DDGS
+from googlesearch import search
 from langchain_community.chat_models import ChatOllama
 from langchain.chains import LLMChain
 from langchain.prompts import ChatPromptTemplate
@@ -28,16 +28,13 @@ def init_reddit() -> praw.Reddit | None:
 reddit = init_reddit()
 
 
-def search_ddg_quora(company_description: str, num_links: int) -> List[str]:
-    """Return Quora URLs using DuckDuckGo."""
+def search_google_quora(company_description: str, num_links: int) -> List[str]:
+    """Return Quora URLs using Google search."""
     query = f"site:quora.com {company_description}"
-    with DDGS() as ddgs:
-        results = ddgs.text(query, region="wt-wt", safesearch="off", max_results=num_links * 2) or []
 
     urls: List[str] = []
-    for r in results:
-        url = r.get("href") or r.get("url")
-        if url and "quora.com" in url:
+    for url in search(query, num_results=num_links * 2, lang="en"):
+        if "quora.com" in url:
             urls.append(url)
         if len(urls) >= num_links:
             break
@@ -57,7 +54,7 @@ def search_reddit(company_description: str, limit: int) -> List[str]:
 
 
 def search_for_urls(company_description: str, num_links: int) -> List[str]:
-    quora_urls = search_ddg_quora(company_description, num_links // 2)
+    quora_urls = search_google_quora(company_description, num_links // 2)
     reddit_urls = search_reddit(company_description, num_links - len(quora_urls))
     combined = quora_urls + reddit_urls
     return combined[:num_links]

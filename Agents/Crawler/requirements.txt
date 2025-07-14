@@ -1,5 +1,6 @@
 # Requires Reddit API credentials for praw
 duckduckgo_search
+googlesearch-python
 langchain_community
 pandas
 openpyxl
