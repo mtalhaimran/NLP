@@ -11,11 +11,21 @@ from bs4 import BeautifulSoup
 import os
 import praw
 
-reddit = praw.Reddit(
-    client_id=os.getenv("REDDIT_CLIENT_ID"),
-    client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-    user_agent=os.getenv("REDDIT_USER_AGENT", "lead-gen-app"),
-)
+
+def init_reddit() -> praw.Reddit | None:
+    """Initialize Reddit instance if credentials are available."""
+    client_id = os.getenv("REDDIT_CLIENT_ID")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return None
+    return praw.Reddit(
+        client_id=client_id,
+        client_secret=client_secret,
+        user_agent=os.getenv("REDDIT_USER_AGENT", "lead-gen-app"),
+    )
+
+
+reddit = init_reddit()
 
 
 def search_ddg_quora(company_description: str, num_links: int) -> List[str]:
@@ -28,7 +38,7 @@ def search_ddg_quora(company_description: str, num_links: int) -> List[str]:
 
 def search_reddit(company_description: str, limit: int) -> List[str]:
     """Return Reddit post links using the official API."""
-    if limit <= 0:
+    if limit <= 0 or reddit is None:
         return []
     urls = []
     for submission in reddit.subreddit("all").search(company_description, limit=limit):
@@ -171,6 +181,9 @@ def main():
             with st.spinner("Processing your query..."):
                 company_description = transform_query(user_query)
                 st.write("🎯 Searching for:", company_description)
+
+            if reddit is None:
+                st.warning("Reddit credentials not set. Only Quora URLs will be searched.")
 
             with st.spinner("Searching for relevant URLs..."):
                 urls = search_for_urls(company_description, num_links)

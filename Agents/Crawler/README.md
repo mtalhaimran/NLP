@@ -26,4 +26,4 @@ This Streamlit application searches Quora with DuckDuckGo and Reddit using the o
 
 When prompted, provide the Excel filename and describe the leads you are looking for.
 
-The Reddit API requires credentials set in the `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `REDDIT_USER_AGENT` environment variables.
+The Reddit API requires credentials set in the `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `REDDIT_USER_AGENT` environment variables. If these are not provided, Reddit search will be skipped.
