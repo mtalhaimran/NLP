@@ -81,18 +81,8 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
-Generate a structured JSON response matching this schema. Optionally include a "title" summarizing your analysis:
-{{
-  "decision": "<GO or NO_GO>",
-  "key_risks": ["risk1", "risk2", ...],
-  "opportunities": ["op1", "op2", ...],
-  "recommendations": [
-    {{"title": "<Recommendation title>", "detail": "<Recommendation detail>"}},
-    ...
-  ]
-}}
-Start your response with "{{" and return only valid JSON matching this schema.
-No additional commentary.
+Summarize your decision, key risks, opportunities and recommendations using your own headings.
+Avoid strict JSON formatting and present the information in clear prose or bullet points.
 '''    ),
     human_prompt(
         '''
@@ -100,7 +90,7 @@ Project Data:
 ```json
 {project}
 ```
-Respond strictly in the JSON format specified.
+Provide your analysis in free form using headings where appropriate.
 '''    ),
 ])
 
@@ -109,12 +99,8 @@ CTO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
-Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. Optionally include a "title" summarizing the proposal.
-Include one JSON object with keys:
-- "architecture": brief summary
- - "components": list of {{"name":..., "purpose":...}}
-- "scalability_plan": description
-Respond with a bulleted summary plus the JSON block.'''    ),
+Provide an overview, list the main components and outline a scalability strategy. You may include a title.
+Use headings and bullet points of your choosing and avoid strict JSON formatting.'''    ),
     human_prompt(
         '''
 Project Data:
@@ -133,16 +119,8 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables. Optionally add a "title" summarizing this roadmap.
-Respond only with valid JSON using this structure:
-{{
-  "<PhaseName>": {{
-    "objectives": ["objective1", ...],
-    "deliverables": ["deliverable1", ...]
-  }},
-  ...
-}}
-Start your reply with "{{" and ensure it is valid JSON.'''    ),
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and list objectives and deliverables for each.
+Feel free to add a title and organise the roadmap using your own headings and bullet points instead of strict JSON.'''    ),
     human_prompt(
         '''
 Project Data:
@@ -161,18 +139,9 @@ CTO Specification:
 DEV_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Lead Developer. For each roadmap phase, output a JSON object using markdown-style headings for clarity.
-The schema for each phase is:
-{{
-  "phase": "<MVP|Growth|Scale>",
-  "tasks": ["<task1>", ...],
-  "ci_cd_pipeline": {{
-    "tool": "<tool name>",
-    "overview": "<pipeline overview>"
-  }}
-}}
-Return an array of these phase objects. Use the key "ci_cd_pipeline" so the CI/CD details appear once under that heading.
-Provide valid JSON only.'''
+You are the Lead Developer. For each roadmap phase describe the main tasks and outline a CI/CD pipeline.
+Use markdown headings for each phase and bullet points for tasks. Include a section titled "CI/CD Pipeline" with the tooling and overview.
+Avoid strict JSON formatting.'''
     ),
     human_prompt(
         '''
@@ -188,14 +157,8 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. Optionally include a "title" summarizing this section.
-Respond only with JSON having the keys:
-{{
-  "target_audience": ["audience1", ...],
-  "channels": ["channel1", ...],
-  "messaging": ["theme1", ...]
-}}
-Start your reply with "{{" and ensure it is valid JSON.'''    ),
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. You may add a title.
+Describe the target audience, key channels and messaging themes using your own headings and bullet points instead of strict JSON.'''    ),
     human_prompt(
         '''
 Project Data:
@@ -214,11 +177,8 @@ Roadmap:
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Client Success Manager. From the implementation details, draft JSON with an optional "title" and keys:
- - "onboarding_process": array of {{"step":..., "description":...}}
-- "retention_strategy": array of strategies
-- "feedback_loop": array of feedback mechanisms
-Allow the model to name each section. Provide JSON only.'''    ),
+You are the Client Success Manager. Using the implementation details, outline the onboarding process, retention strategy and feedback loop.
+You may provide a title and organise the information in sections with bullet points. Avoid strict JSON formatting.'''    ),
     human_prompt(
         '''
 Implementation Details:

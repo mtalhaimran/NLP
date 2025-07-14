@@ -96,7 +96,7 @@ class LeadAgency(B2BAgency):
         ]
 
         for role, content in self.results.items():
-            summary = json.dumps(content, indent=2)
+            summary = content if isinstance(content, str) else json.dumps(content, indent=2)
             story.append(Paragraph(f"{role} Summary", styles["Section"]))
             story.append(Preformatted(summary, styles["Normal"]))
             story.append(PageBreak())
