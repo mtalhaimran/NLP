@@ -1,6 +1,6 @@
 ## 🎯 AI Lead Generation Agent
 
-This Streamlit application searches Quora with DuckDuckGo and Reddit using the official API. It downloads each page with simple HTTP requests, extracts user interactions with a local Mistral model and saves the results to an Excel file.
+This Streamlit application searches Quora with DuckDuckGo (filtered to the `quora.com` domain) and Reddit using the official API. It downloads each page with simple HTTP requests, extracts user interactions with a local Mistral model and saves the results to an Excel file.
 
 ### Features
 - Searches Quora links via DuckDuckGo

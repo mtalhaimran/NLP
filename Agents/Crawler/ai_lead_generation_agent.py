@@ -32,8 +32,16 @@ def search_ddg_quora(company_description: str, num_links: int) -> List[str]:
     """Return Quora URLs using DuckDuckGo."""
     query = f"site:quora.com {company_description}"
     with DDGS() as ddgs:
-        results = ddgs.text(query, max_results=num_links) or []
-    return [r.get("href") or r.get("url") for r in results if r.get("href") or r.get("url")]
+        results = ddgs.text(query, region="wt-wt", safesearch="off", max_results=num_links * 2) or []
+
+    urls: List[str] = []
+    for r in results:
+        url = r.get("href") or r.get("url")
+        if url and "quora.com" in url:
+            urls.append(url)
+        if len(urls) >= num_links:
+            break
+    return urls
 
 
 def search_reddit(company_description: str, limit: int) -> List[str]:
