@@ -1,5 +1,5 @@
 import streamlit as st
-from duckduckgo_search import DDGS
+from googlesearch import search
 from langchain_community.chat_models import ChatOllama
 from langchain.chains import LLMChain
 from langchain.prompts import ChatPromptTemplate
@@ -28,16 +28,13 @@ def init_reddit() -> praw.Reddit | None:
 reddit = init_reddit()
 
 
-def search_ddg_quora(company_description: str, num_links: int) -> List[str]:
-    """Return Quora URLs using DuckDuckGo."""
+def search_google_quora(company_description: str, num_links: int) -> List[str]:
+    """Return Quora URLs using Google search."""
     query = f"site:quora.com {company_description}"
-    with DDGS() as ddgs:
-        results = ddgs.text(query, region="wt-wt", safesearch="off", max_results=num_links * 2) or []
 
     urls: List[str] = []
-    for r in results:
-        url = r.get("href") or r.get("url")
-        if url and "quora.com" in url:
+    for url in search(query, num_results=num_links * 2, lang="en"):
+        if "quora.com" in url:
             urls.append(url)
         if len(urls) >= num_links:
             break
@@ -57,7 +54,7 @@ def search_reddit(company_description: str, limit: int) -> List[str]:
 
 
 def search_for_urls(company_description: str, num_links: int) -> List[str]:
-    quora_urls = search_ddg_quora(company_description, num_links // 2)
+    quora_urls = search_google_quora(company_description, num_links // 2)
     reddit_urls = search_reddit(company_description, num_links - len(quora_urls))
     combined = quora_urls + reddit_urls
     return combined[:num_links]
@@ -93,20 +90,19 @@ def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
     chain = LLMChain(llm=llm, prompt=prompt)
 
     for url in urls:
+        page_data = {"website_url": url, "user_info": []}
         try:
             page_content = load_page_text(url)
             result = chain.predict(page_content=page_content)
             parsed = json.loads(result)
             interactions = parsed.get("interactions", [])
-            if interactions:
-                user_info_list.append(
-                    {
-                        "website_url": url,
-                        "user_info": interactions,
-                    }
-                )
+            page_data["user_info"] = interactions
         except Exception:
+            # Even if extraction fails, keep the URL so the Excel file
+            # lists which pages were processed.
             pass
+        finally:
+            user_info_list.append(page_data)
 
     return user_info_list
 
@@ -115,8 +111,8 @@ def format_user_info_to_flattened_json(user_info_list: List[dict]) -> List[dict]
     
     for info in user_info_list:
         website_url = info["website_url"]
-        user_info = info["user_info"]
-        
+        user_info = info.get("user_info") or [{}]
+
         for interaction in user_info:
             flattened_interaction = {
                 "Website URL": website_url,
