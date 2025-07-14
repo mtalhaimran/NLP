@@ -16,9 +16,10 @@ from reportlab.platypus import (
     Preformatted,
     ListFlowable,
 )
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
+
+from pdf_utils import init_styles, to_flowables
 
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -334,34 +335,6 @@ class B2BAgency:
     def export_pdf(self, project: Project, out_path: Path) -> None:
         """Render proposal results into a formatted PDF."""
 
-        def to_flowables(data: Any) -> List[Any]:
-            flows: List[Any] = []
-            if isinstance(data, dict):
-                for k, v in data.items():
-                    flows.append(Paragraph(str(k).replace("_", " ").title(), styles["SubHeading"]))
-                    flows.extend(to_flowables(v))
-            elif isinstance(data, list):
-                if all(isinstance(i, (str, int, float)) for i in data):
-                    items = [Paragraph(str(i), styles["NormalLeft"]) for i in data]
-                    flows.append(
-                        ListFlowable(
-                            items,
-                            bulletType="bullet",
-                            leftIndent=0,
-                            rightIndent=0,
-                            spaceBefore=2,
-                            spaceAfter=6,
-                        )
-                    )
-                else:
-                    for item in data:
-                        flows.extend(to_flowables(item))
-            elif isinstance(data, (str, int, float)):
-                flows.append(Paragraph(str(data), styles["NormalLeft"]))
-            else:
-                flows.append(Preformatted(json.dumps(data, indent=2), styles["NormalLeft"]))
-            return flows
-
         try:
             doc = SimpleDocTemplate(
                 str(out_path),
@@ -372,52 +345,7 @@ class B2BAgency:
                 bottomMargin=1 * inch,
             )
 
-            styles = getSampleStyleSheet()
-            styles.add(
-                ParagraphStyle(
-                    "DocTitle",
-                    parent=styles["Heading1"],
-                    fontSize=28,
-                    leading=32,
-                    alignment=1,
-                    spaceAfter=24,
-                )
-            )
-            styles.add(
-                ParagraphStyle(
-                    "Subtitle",
-                    parent=styles["Heading2"],
-                    fontSize=16,
-                    leading=20,
-                    alignment=1,
-                    textColor=colors.grey,
-                    spaceAfter=48,
-                )
-            )
-            styles.add(
-                ParagraphStyle(
-                    "Section",
-                    parent=styles["Heading2"],
-                    fontSize=18,
-                    leading=22,
-                    textColor=colors.darkblue,
-                    spaceBefore=12,
-                    spaceAfter=8,
-                )
-            )
-            styles.add(
-                ParagraphStyle(
-                    "SubHeading",
-                    parent=styles["Heading3"],
-                    fontSize=14,
-                    leading=18,
-                    spaceBefore=6,
-                    spaceAfter=4,
-                )
-            )
-            styles["Normal"].fontSize = 11
-            styles["Normal"].leading = 14
-            styles.add(ParagraphStyle("NormalLeft", parent=styles["Normal"], alignment=0))
+            styles = init_styles()
 
             story: List[Any] = [
                 Paragraph(project.name, styles["DocTitle"]),
@@ -431,7 +359,7 @@ class B2BAgency:
                     heading = content.get("title") or heading
                     content = {k: v for k, v in content.items() if k != "title"}
                 story.append(Paragraph(heading, styles["Section"]))
-                story.extend(to_flowables(content))
+                story.extend(to_flowables(content, styles))
                 story.append(PageBreak())
 
             # Remove last page break for cleaner output
