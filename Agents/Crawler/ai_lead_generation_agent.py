@@ -90,20 +90,19 @@ def extract_user_info_from_urls(urls: List[str]) -> List[dict]:
     chain = LLMChain(llm=llm, prompt=prompt)
 
     for url in urls:
+        page_data = {"website_url": url, "user_info": []}
         try:
             page_content = load_page_text(url)
             result = chain.predict(page_content=page_content)
             parsed = json.loads(result)
             interactions = parsed.get("interactions", [])
-            if interactions:
-                user_info_list.append(
-                    {
-                        "website_url": url,
-                        "user_info": interactions,
-                    }
-                )
+            page_data["user_info"] = interactions
         except Exception:
+            # Even if extraction fails, keep the URL so the Excel file
+            # lists which pages were processed.
             pass
+        finally:
+            user_info_list.append(page_data)
 
     return user_info_list
 
@@ -112,8 +111,8 @@ def format_user_info_to_flattened_json(user_info_list: List[dict]) -> List[dict]
     
     for info in user_info_list:
         website_url = info["website_url"]
-        user_info = info["user_info"]
-        
+        user_info = info.get("user_info") or [{}]
+
         for interaction in user_info:
             flattened_interaction = {
                 "Website URL": website_url,
