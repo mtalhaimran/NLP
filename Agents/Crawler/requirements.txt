@@ -1,5 +1,9 @@
-agno
-composio-phidata
-composio==0.1.1
-pydantic==2.10.5
+# Requires Reddit API credentials for praw
+duckduckgo_search
+langchain_community
+pandas
+openpyxl
+requests
+beautifulsoup4
+praw
 streamlit
