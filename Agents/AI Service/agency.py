@@ -80,7 +80,7 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
-Generate a structured JSON response matching this schema, including section titles of your choice:
+Generate a structured JSON response matching this schema. Optionally include a "title" summarizing your analysis:
 {{
   "decision": "<GO or NO_GO>",
   "key_risks": ["risk1", "risk2", ...],
@@ -107,8 +107,8 @@ Respond strictly in the JSON format specified.
 CTO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack. 
-Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. 
+You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
+Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. Optionally include a "title" summarizing the proposal.
 Include one JSON object with keys:
 - "architecture": brief summary
  - "components": list of {{"name":..., "purpose":...}}
@@ -132,7 +132,7 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables.
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables. Optionally add a "title" summarizing this roadmap.
 Respond only with valid JSON using this structure:
 {{
   "<PhaseName>": {{
@@ -160,7 +160,7 @@ CTO Specification:
 DEV_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Lead Developer. For each roadmap phase, generate a JSON section containing:
+You are the Lead Developer. For each roadmap phase, generate a JSON section containing an optional "title" plus:
 - "tasks": list of task descriptions
 - "ci_cd": object with fields "tool" and "pipeline_overview"
 Let the model assign its own phase labels based on the roadmap headings. Provide valid JSON only.'''    ),
@@ -178,7 +178,7 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. Optionally include a "title" summarizing this section.
 Respond only with JSON having the keys:
 {{
   "target_audience": ["audience1", ...],
@@ -204,7 +204,7 @@ Roadmap:
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Client Success Manager. From the implementation details, draft JSON with keys:
+You are the Client Success Manager. From the implementation details, draft JSON with an optional "title" and keys:
  - "onboarding_process": array of {{"step":..., "description":...}}
 - "retention_strategy": array of strategies
 - "feedback_loop": array of feedback mechanisms
@@ -407,7 +407,11 @@ class B2BAgency:
             ]
 
             for role, content in self.results.items():
-                story.append(Paragraph(f"{role} Analysis", styles["Section"]))
+                heading = f"{role} Analysis"
+                if isinstance(content, dict) and "title" in content:
+                    heading = content.get("title") or heading
+                    content = {k: v for k, v in content.items() if k != "title"}
+                story.append(Paragraph(heading, styles["Section"]))
                 story.extend(to_flowables(content))
                 story.append(PageBreak())
 
