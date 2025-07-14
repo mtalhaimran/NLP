@@ -62,6 +62,7 @@ def export_pdf(results: Dict[str, Any], metrics: Dict[str, float], url: str, out
     styles.add(ParagraphStyle("SubHeading", parent=styles["Heading3"], fontSize=14, leading=18, spaceBefore=6, spaceAfter=4))
     styles["Normal"].fontSize = 11
     styles["Normal"].leading = 14
+    styles.add(ParagraphStyle("NormalLeft", parent=styles["Normal"], alignment=0))
 
     def to_flowables(data: Any) -> List[Any]:
         flows: List[Any] = []
@@ -71,13 +72,22 @@ def export_pdf(results: Dict[str, Any], metrics: Dict[str, float], url: str, out
                 flows.extend(to_flowables(v))
         elif isinstance(data, list):
             if all(isinstance(i, (str, int, float)) for i in data):
-                items = [Paragraph(str(i), styles["Normal"]) for i in data]
-                flows.append(ListFlowable(items, bulletType="bullet", leftIndent=20, spaceBefore=2, spaceAfter=6))
+                items = [Paragraph(str(i), styles["NormalLeft"]) for i in data]
+                flows.append(
+                    ListFlowable(
+                        items,
+                        bulletType="bullet",
+                        leftIndent=0,
+                        rightIndent=0,
+                        spaceBefore=2,
+                        spaceAfter=6,
+                    )
+                )
             else:
                 for item in data:
                     flows.extend(to_flowables(item))
         else:
-            flows.append(Paragraph(str(data), styles["Normal"]))
+            flows.append(Paragraph(str(data), styles["NormalLeft"]))
         return flows
 
     doc = SimpleDocTemplate(str(out), pagesize=letter, leftMargin=0.75 * inch, rightMargin=0.75 * inch, topMargin=1 * inch, bottomMargin=1 * inch)

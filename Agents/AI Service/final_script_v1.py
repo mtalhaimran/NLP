@@ -86,13 +86,14 @@ class LeadAgency(B2BAgency):
             elif isinstance(data, list):
                 if all(isinstance(i, (str, int, float)) for i in data):
                     items = [
-                        Paragraph(str(i), styles["Normal"]) for i in data
+                        Paragraph(str(i), styles["NormalLeft"]) for i in data
                     ]
                     flows.append(
                         ListFlowable(
                             items,
                             bulletType="bullet",
-                            leftIndent=20,
+                            leftIndent=0,
+                            rightIndent=0,
                             spaceBefore=2,
                             spaceAfter=6,
                         )
@@ -101,9 +102,11 @@ class LeadAgency(B2BAgency):
                     for item in data:
                         flows.extend(to_flowables(item))
             elif isinstance(data, (str, int, float)):
-                flows.append(Paragraph(str(data), styles["Normal"]))
+                flows.append(Paragraph(str(data), styles["NormalLeft"]))
             else:
-                flows.append(Preformatted(json.dumps(data, indent=2), styles["Normal"]))
+                flows.append(
+                    Preformatted(json.dumps(data, indent=2), styles["NormalLeft"])
+                )
             return flows
 
         doc = SimpleDocTemplate(
@@ -161,6 +164,7 @@ class LeadAgency(B2BAgency):
         )
         styles["Normal"].fontSize = 11
         styles["Normal"].leading = 14
+        styles.add(ParagraphStyle("NormalLeft", parent=styles["Normal"], alignment=0))
 
         story: List[Any] = [
             Paragraph(lead_url, styles["DocTitle"]),
