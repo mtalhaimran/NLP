@@ -22,6 +22,7 @@ from reportlab.platypus import (
 )
 
 REPO_DIR = Path(__file__).resolve().parent
+MIN_LEAD_SCORE = 50.0
 sys.path.append(str(REPO_DIR / "Agents" / "AI Service"))
 
 from agency import B2BAgency, Project, draw_border
@@ -192,15 +193,22 @@ class LeadAgency(B2BAgency):
 
 
 # ─── ASYNC PIPELINE ORCHESTRATION ──────────────────────────────────────────────
-async def analyze_text(text: str) -> LeadAgency:
+async def analyze_text(
+    text: str,
+    name: str,
+    project_type: str,
+    budget: str,
+    timeline: str,
+    priority: str,
+) -> LeadAgency:
     agency = LeadAgency()
     project = Project(
-        name="Quora Lead",
+        name=name,
         description=text,
-        project_type="Lead",
-        budget="N/A",
-        timeline="N/A",
-        priority="High",
+        project_type=project_type,
+        budget=budget,
+        timeline=timeline,
+        priority=priority,
     )
     pj = project.model_dump_json()
 
@@ -234,6 +242,13 @@ st.title("🎯 Lead Crawler & AI Report Generator")
 with st.sidebar:
     st.header("Search Settings")
     num_links = st.number_input("Number of links", min_value=1, max_value=10, value=3)
+    st.header("Proposal Options")
+    project_name = st.text_input("Project name", value="Quora Lead")
+    project_type = st.text_input("Project type", value="Lead")
+    budget = st.text_input("Budget", value="N/A")
+    timeline = st.text_input("Timeline", value="N/A")
+    priority = st.selectbox("Priority", ["High", "Medium", "Low"], index=0)
+    pdf_filename = st.text_input("Output PDF filename", value="lead_report.pdf")
     if st.button("Reset"):
         st.session_state.clear()
         st.experimental_rerun()
@@ -255,20 +270,45 @@ if st.button("Find Leads"):
             with st.spinner("Scoring leads…"):
                 scores = score_leads(urls)
             top_url = max(scores, key=scores.get)
+            top_score = scores[top_url]
             st.session_state["top_url"] = top_url
+            st.session_state["top_score"] = top_score
             st.write("Top lead:", top_url)
+            st.write("Lead score:", f"{top_score:.2f}")
 
 if "top_url" in st.session_state:
-    if st.button("Analyze Lead"):
-        lead_url = st.session_state["top_url"]
+    top_score = st.session_state.get("top_score", 0.0)
+    lead_url = st.session_state["top_url"]
+
+    def run_analysis() -> None:
         page_text = load_page_text(lead_url)
         answers, views = parse_metrics(page_text)
-        agency = asyncio.run(analyze_text(page_text))
-        pdf_file = REPO_DIR / "lead_report.pdf"
+        agency = asyncio.run(
+            analyze_text(
+                page_text,
+                project_name,
+                project_type,
+                budget,
+                timeline,
+                priority,
+            )
+        )
+        pdf_file = REPO_DIR / pdf_filename
         agency.export_pdf(lead_url, {"answers": answers, "views": views}, pdf_file)
         with open(pdf_file, "rb") as f:
             st.download_button(
                 "Download Report",
                 data=f.read(),
-                file_name="lead_report.pdf",
+                file_name=pdf_filename,
             )
+
+    if top_score < MIN_LEAD_SCORE:
+        st.warning(
+            f"Lead score {top_score:.2f} is below the minimum of {MIN_LEAD_SCORE}. "
+            "Refine your search or adjust options."
+        )
+        if st.button("Analyze Anyway"):
+            run_analysis()
+    else:
+        if st.button("Analyze Lead"):
+            run_analysis()
