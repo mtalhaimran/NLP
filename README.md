@@ -11,7 +11,7 @@ Follow the steps below to start the application:
 
 1. **Install dependencies**
    ```bash
-   cd Agents/Enigma_grp_diag_sys
+   cd Enigma_grp_diag_sys
    pip install -r requirements.txt
    ```
 2. **Launch the Streamlit app**
