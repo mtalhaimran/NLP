@@ -95,14 +95,31 @@ class LeadAgency(B2BAgency):
             PageBreak(),
         ]
 
-        for role, content in self.results.items():
-            summary = content if isinstance(content, str) else json.dumps(content, indent=2)
+        for agent in self.agents:
+            role = agent.role
+            content = self.results.get(role)
+            if content is None:
+                continue
+
+            summary = (
+                content
+                if isinstance(content, str)
+                else json.dumps(content, indent=2, ensure_ascii=False)
+            )
             story.append(Paragraph(f"{role} Summary", styles["Section"]))
-            story.append(Preformatted(summary, styles["Normal"]))
+            story.append(
+                Preformatted(summary, styles["NormalLeft"], maxLineLength=80)
+            )
             story.append(PageBreak())
 
-            story.append(Paragraph(f"{role} Details", styles["Section"]))
-            story.extend(to_flowables(content, styles))
+            heading = f"{role} Details"
+            if isinstance(content, dict) and "title" in content:
+                heading = content.get("title") or heading
+                body = {k: v for k, v in content.items() if k != "title"}
+            else:
+                body = content
+            story.append(Paragraph(heading, styles["Section"]))
+            story.extend(to_flowables(body, styles))
             story.append(PageBreak())
 
         if story and isinstance(story[-1], PageBreak):
