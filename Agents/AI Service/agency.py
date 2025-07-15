@@ -46,7 +46,15 @@ from langchain_ollama import ChatOllama
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "MARKETING", "CLIENT"]}
+MODEL_TAGS = {
+    "CEO": "llama3:8b",
+    "CTO": "llama3:8b",
+    "PM":  "phi3:instruct",
+    "DEV": "phi3:instruct",
+    "MARKETING": "gemma:7b-instruct",
+    "CLIENT": "gemma:7b-instruct",
+}
+# MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV", "MARKETING", "CLIENT"]}
 
 # Default timeout (in seconds) for each agent run. The models can be quite
 # slow to respond, especially on lower-spec hardware. 60 seconds proved too
