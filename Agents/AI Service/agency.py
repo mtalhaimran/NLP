@@ -16,9 +16,10 @@ from reportlab.platypus import (
     Preformatted,
     ListFlowable,
 )
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
+
+from pdf_utils import init_styles, to_flowables
 
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -80,18 +81,9 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
-Generate a structured JSON response matching this schema. Optionally include a "title" summarizing your analysis:
-{{
-  "decision": "<GO or NO_GO>",
-  "key_risks": ["risk1", "risk2", ...],
-  "opportunities": ["op1", "op2", ...],
-  "recommendations": [
-    {{"title": "<Recommendation title>", "detail": "<Recommendation detail>"}},
-    ...
-  ]
-}}
-Start your response with "{{" and return only valid JSON matching this schema.
-No additional commentary.
+Summarize your decision, key risks, opportunities and recommendations using your own headings.
+Avoid strict JSON formatting and present the information in clear prose or bullet points.
+Keep the response under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -99,7 +91,7 @@ Project Data:
 ```json
 {project}
 ```
-Respond strictly in the JSON format specified.
+Provide your analysis in free form using headings where appropriate.
 '''    ),
 ])
 
@@ -108,12 +100,10 @@ CTO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
-Organize your output organically: start with an overview, then list components, and conclude with a scalability strategy. Optionally include a "title" summarizing the proposal.
-Include one JSON object with keys:
-- "architecture": brief summary
- - "components": list of {{"name":..., "purpose":...}}
-- "scalability_plan": description
-Respond with a bulleted summary plus the JSON block.'''    ),
+Provide an overview, list the main components and outline a scalability strategy. You may include a title.
+Use headings and bullet points of your choosing and avoid strict JSON formatting.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Project Data:
@@ -132,16 +122,10 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and under each phase include bullet points for objectives and deliverables. Optionally add a "title" summarizing this roadmap.
-Respond only with valid JSON using this structure:
-{{
-  "<PhaseName>": {{
-    "objectives": ["objective1", ...],
-    "deliverables": ["deliverable1", ...]
-  }},
-  ...
-}}
-Start your reply with "{{" and ensure it is valid JSON.'''    ),
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and list objectives and deliverables for each.
+Feel free to add a title and organise the roadmap using your own headings and bullet points instead of strict JSON.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Project Data:
@@ -160,18 +144,11 @@ CTO Specification:
 DEV_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Lead Developer. For each roadmap phase, output a JSON object using markdown-style headings for clarity.
-The schema for each phase is:
-{{
-  "phase": "<MVP|Growth|Scale>",
-  "tasks": ["<task1>", ...],
-  "ci_cd_pipeline": {{
-    "tool": "<tool name>",
-    "overview": "<pipeline overview>"
-  }}
-}}
-Return an array of these phase objects. Use the key "ci_cd_pipeline" so the CI/CD details appear once under that heading.
-Provide valid JSON only.'''
+You are the Lead Developer. For each roadmap phase describe the main tasks and outline a CI/CD pipeline.
+Use markdown headings for each phase and bullet points for tasks. Include a section titled "CI/CD Pipeline" with the tooling and overview.
+Avoid strict JSON formatting.
+Keep the response under 200 words.
+'''
     ),
     human_prompt(
         '''
@@ -187,14 +164,10 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. Optionally include a "title" summarizing this section.
-Respond only with JSON having the keys:
-{{
-  "target_audience": ["audience1", ...],
-  "channels": ["channel1", ...],
-  "messaging": ["theme1", ...]
-}}
-Start your reply with "{{" and ensure it is valid JSON.'''    ),
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. You may add a title.
+Describe the target audience, key channels and messaging themes using your own headings and bullet points instead of strict JSON.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Project Data:
@@ -213,11 +186,10 @@ Roadmap:
 CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Client Success Manager. From the implementation details, draft JSON with an optional "title" and keys:
- - "onboarding_process": array of {{"step":..., "description":...}}
-- "retention_strategy": array of strategies
-- "feedback_loop": array of feedback mechanisms
-Allow the model to name each section. Provide JSON only.'''    ),
+You are the Client Success Manager. Using the implementation details, outline the onboarding process, retention strategy and feedback loop.
+You may provide a title and organise the information in sections with bullet points. Avoid strict JSON formatting.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Implementation Details:
@@ -304,7 +276,14 @@ class B2BAgency:
             await asyncio.gather(*(self.events[d].wait() for d in deps))
         agent = self.agent_map[role]
         logger.info(f"Running {role} agent…")
-        res = await agent.run(project_json, self.context, self.timeout)
+        try:
+            res = await agent.run(project_json, self.context, self.timeout)
+        except asyncio.TimeoutError:
+            logger.error(f"{role} agent timed out after {self.timeout}s")
+            res = {"error": f"{role} agent timed out"}
+        except Exception as e:
+            logger.exception(f"{role} agent failed: {e}")
+            res = {"error": str(e)}
         self.context[role] = res
         self.results[role] = res
         self.events[role].set()
@@ -334,34 +313,6 @@ class B2BAgency:
     def export_pdf(self, project: Project, out_path: Path) -> None:
         """Render proposal results into a formatted PDF."""
 
-        def to_flowables(data: Any) -> List[Any]:
-            flows: List[Any] = []
-            if isinstance(data, dict):
-                for k, v in data.items():
-                    flows.append(Paragraph(str(k).replace("_", " ").title(), styles["SubHeading"]))
-                    flows.extend(to_flowables(v))
-            elif isinstance(data, list):
-                if all(isinstance(i, (str, int, float)) for i in data):
-                    items = [Paragraph(str(i), styles["NormalLeft"]) for i in data]
-                    flows.append(
-                        ListFlowable(
-                            items,
-                            bulletType="bullet",
-                            leftIndent=0,
-                            rightIndent=0,
-                            spaceBefore=2,
-                            spaceAfter=6,
-                        )
-                    )
-                else:
-                    for item in data:
-                        flows.extend(to_flowables(item))
-            elif isinstance(data, (str, int, float)):
-                flows.append(Paragraph(str(data), styles["NormalLeft"]))
-            else:
-                flows.append(Preformatted(json.dumps(data, indent=2), styles["NormalLeft"]))
-            return flows
-
         try:
             doc = SimpleDocTemplate(
                 str(out_path),
@@ -372,52 +323,7 @@ class B2BAgency:
                 bottomMargin=1 * inch,
             )
 
-            styles = getSampleStyleSheet()
-            styles.add(
-                ParagraphStyle(
-                    "DocTitle",
-                    parent=styles["Heading1"],
-                    fontSize=28,
-                    leading=32,
-                    alignment=1,
-                    spaceAfter=24,
-                )
-            )
-            styles.add(
-                ParagraphStyle(
-                    "Subtitle",
-                    parent=styles["Heading2"],
-                    fontSize=16,
-                    leading=20,
-                    alignment=1,
-                    textColor=colors.grey,
-                    spaceAfter=48,
-                )
-            )
-            styles.add(
-                ParagraphStyle(
-                    "Section",
-                    parent=styles["Heading2"],
-                    fontSize=18,
-                    leading=22,
-                    textColor=colors.darkblue,
-                    spaceBefore=12,
-                    spaceAfter=8,
-                )
-            )
-            styles.add(
-                ParagraphStyle(
-                    "SubHeading",
-                    parent=styles["Heading3"],
-                    fontSize=14,
-                    leading=18,
-                    spaceBefore=6,
-                    spaceAfter=4,
-                )
-            )
-            styles["Normal"].fontSize = 11
-            styles["Normal"].leading = 14
-            styles.add(ParagraphStyle("NormalLeft", parent=styles["Normal"], alignment=0))
+            styles = init_styles()
 
             story: List[Any] = [
                 Paragraph(project.name, styles["DocTitle"]),
@@ -431,7 +337,7 @@ class B2BAgency:
                     heading = content.get("title") or heading
                     content = {k: v for k, v in content.items() if k != "title"}
                 story.append(Paragraph(heading, styles["Section"]))
-                story.extend(to_flowables(content))
+                story.extend(to_flowables(content, styles))
                 story.append(PageBreak())
 
             # Remove last page break for cleaner output

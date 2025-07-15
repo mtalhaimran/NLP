@@ -9,12 +9,9 @@ import requests
 import streamlit as st
 from bs4 import BeautifulSoup
 from googlesearch import search
-from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
-    ListFlowable,
     PageBreak,
     Paragraph,
     Preformatted,
@@ -26,6 +23,7 @@ MIN_LEAD_SCORE = 50.0
 sys.path.append(str(REPO_DIR / "Agents" / "AI Service"))
 
 from agency import B2BAgency, Project, draw_border
+from pdf_utils import init_styles, to_flowables
 
 # ─── CRAWLER UTILITIES ──────────────────────────────────────────────────────────
 
@@ -76,39 +74,6 @@ def score_leads(urls: List[str]) -> Dict[str, float]:
 # ─── AGENCY SUBCLASS WITH PDF EXPORT ────────────────────────────────────────────
 class LeadAgency(B2BAgency):
     def export_pdf(self, lead_url: str, metrics: Dict[str, int], out_path: Path) -> None:
-        def to_flowables(data: Any) -> List[Any]:
-            flows: List[Any] = []
-            if isinstance(data, dict):
-                for k, v in data.items():
-                    flows.append(
-                        Paragraph(str(k).replace("_", " ").title(), styles["SubHeading"])
-                    )
-                    flows.extend(to_flowables(v))
-            elif isinstance(data, list):
-                if all(isinstance(i, (str, int, float)) for i in data):
-                    items = [
-                        Paragraph(str(i), styles["NormalLeft"]) for i in data
-                    ]
-                    flows.append(
-                        ListFlowable(
-                            items,
-                            bulletType="bullet",
-                            leftIndent=0,
-                            rightIndent=0,
-                            spaceBefore=2,
-                            spaceAfter=6,
-                        )
-                    )
-                else:
-                    for item in data:
-                        flows.extend(to_flowables(item))
-            elif isinstance(data, (str, int, float)):
-                flows.append(Paragraph(str(data), styles["NormalLeft"]))
-            else:
-                flows.append(
-                    Preformatted(json.dumps(data, indent=2), styles["NormalLeft"])
-                )
-            return flows
 
         doc = SimpleDocTemplate(
             str(out_path),
@@ -119,53 +84,7 @@ class LeadAgency(B2BAgency):
             bottomMargin=1 * inch,
         )
 
-        global styles
-        styles = getSampleStyleSheet()
-        styles.add(
-            ParagraphStyle(
-                "DocTitle",
-                parent=styles["Heading1"],
-                fontSize=28,
-                leading=32,
-                alignment=1,
-                spaceAfter=24,
-            )
-        )
-        styles.add(
-            ParagraphStyle(
-                "Subtitle",
-                parent=styles["Heading2"],
-                fontSize=16,
-                leading=20,
-                alignment=1,
-                textColor=colors.grey,
-                spaceAfter=48,
-            )
-        )
-        styles.add(
-            ParagraphStyle(
-                "Section",
-                parent=styles["Heading2"],
-                fontSize=18,
-                leading=22,
-                textColor=colors.darkblue,
-                spaceBefore=12,
-                spaceAfter=8,
-            )
-        )
-        styles.add(
-            ParagraphStyle(
-                "SubHeading",
-                parent=styles["Heading3"],
-                fontSize=14,
-                leading=18,
-                spaceBefore=6,
-                spaceAfter=4,
-            )
-        )
-        styles["Normal"].fontSize = 11
-        styles["Normal"].leading = 14
-        styles.add(ParagraphStyle("NormalLeft", parent=styles["Normal"], alignment=0))
+        styles = init_styles()
 
         story: List[Any] = [
             Paragraph(lead_url, styles["DocTitle"]),
@@ -177,13 +96,13 @@ class LeadAgency(B2BAgency):
         ]
 
         for role, content in self.results.items():
-            summary = json.dumps(content, indent=2)
+            summary = content if isinstance(content, str) else json.dumps(content, indent=2)
             story.append(Paragraph(f"{role} Summary", styles["Section"]))
             story.append(Preformatted(summary, styles["Normal"]))
             story.append(PageBreak())
 
             story.append(Paragraph(f"{role} Details", styles["Section"]))
-            story.extend(to_flowables(content))
+            story.extend(to_flowables(content, styles))
             story.append(PageBreak())
 
         if story and isinstance(story[-1], PageBreak):
@@ -213,13 +132,8 @@ async def analyze_text(
     pj = project.model_dump_json()
 
     async def run(role: str, deps: List[str] | None = None):
-        if deps:
-            await asyncio.gather(*(agency.events[d].wait() for d in deps))
         with st.spinner(f"Running {role}…"):
-            res = await agency.agent_map[role].run(pj, agency.context, agency.timeout)
-        agency.context[role] = res
-        agency.results[role] = res
-        agency.events[role].set()
+            await agency._run_agent(role, pj, deps)
 
     await run("CEO")
     cto_task = asyncio.create_task(run("CTO", ["CEO"]))
