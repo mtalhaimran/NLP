@@ -81,9 +81,14 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
-Summarize your decision, key risks, opportunities and recommendations using your own headings.
-Avoid strict JSON formatting and present the information in clear prose or bullet points.
-Keep the response under 200 words.
+Respond concisely in JSON using this format:
+{
+  "title": "<short title>",
+  "sections": [
+    {"heading": "<section heading>", "content": "<60 words max>"}
+  ]
+}
+Keep the entire response under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -91,7 +96,7 @@ Project Data:
 ```json
 {project}
 ```
-Provide your analysis in free form using headings where appropriate.
+Return only the JSON described above.
 '''    ),
 ])
 
@@ -100,9 +105,8 @@ CTO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
-Provide an overview, list the main components and outline a scalability strategy. You may include a title.
-Use headings and bullet points of your choosing and avoid strict JSON formatting.
-Keep the response under 200 words.
+Respond in the same JSON format as above with short sections describing the components and scalability plan.
+Limit each section to 60 words and keep the total under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -114,6 +118,7 @@ CEO Analysis:
 ```json
 {CEO}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -122,9 +127,9 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and list objectives and deliverables for each.
-Feel free to add a title and organise the roadmap using your own headings and bullet points instead of strict JSON.
-Keep the response under 200 words.
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully and list key objectives.
+Respond using the JSON format described above with one section per phase and an additional section for overall notes.
+Keep each section under 60 words and the full response under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -136,6 +141,7 @@ CTO Specification:
 ```json
 {CTO}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -145,9 +151,8 @@ DEV_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Lead Developer. For each roadmap phase describe the main tasks and outline a CI/CD pipeline.
-Use markdown headings for each phase and bullet points for tasks. Include a section titled "CI/CD Pipeline" with the tooling and overview.
-Avoid strict JSON formatting.
-Keep the response under 200 words.
+Reply in the same JSON format with one section per phase and a final section "CI/CD Pipeline".
+Limit section content to 60 words each and keep the total under 200 words.
 '''
     ),
     human_prompt(
@@ -156,6 +161,7 @@ Roadmap:
 ```markdown
 {PM}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -164,9 +170,9 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. You may add a title.
-Describe the target audience, key channels and messaging themes using your own headings and bullet points instead of strict JSON.
-Keep the response under 200 words.
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
+Return the plan in the same JSON format with short sections for audience, channels and messaging.
+Keep each section under 60 words and the total under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -178,6 +184,7 @@ Roadmap:
 ```markdown
 {PM}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -187,8 +194,8 @@ CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Client Success Manager. Using the implementation details, outline the onboarding process, retention strategy and feedback loop.
-You may provide a title and organise the information in sections with bullet points. Avoid strict JSON formatting.
-Keep the response under 200 words.
+Respond using the same JSON format with concise sections for onboarding, retention and feedback.
+Keep the entire response under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -196,6 +203,7 @@ Implementation Details:
 ```json
 {DEV}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
