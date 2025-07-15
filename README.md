@@ -6,7 +6,7 @@ and generates a PDF report using multiple AI agents.
 
 ## Running Autolead
 
-Autolead is located in `Agents/Enigma_grp_diag_sys/Autolead.py` and uses Streamlit for the UI.
+Autolead is located in `Enigma_grp_diag_sys/Autolead.py` and uses Streamlit for the UI.
 Follow the steps below to start the application:
 
 1. **Install dependencies**
