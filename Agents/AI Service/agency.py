@@ -52,7 +52,8 @@ MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV"
 # slow to respond, especially on lower-spec hardware. 60 seconds proved too
 # short in practice, so we use a more generous default and expose it via the
 # CLI for user customisation.
-DEFAULT_TIMEOUT: float = 180.0
+DEFAULT_TIMEOUT: float = 240.0
+DEFAULT_RETRIES: int = 1
 
 # ─── DATA SCHEMA ───────────────────────────────────────────────────────
 class Project(BaseModel):
@@ -219,6 +220,25 @@ class Agent:
         self.llm = ChatOllama(model=model_name)
 
     @staticmethod
+    def _trim_words(text: str, limit: int) -> str:
+        """Return text limited to ``limit`` words."""
+        words = text.split()
+        if len(words) > limit:
+            return " ".join(words[:limit]) + "..."
+        return text
+
+    @classmethod
+    def _limit_json_words(cls, obj: Any, per_string: int = 60) -> Any:
+        """Recursively trim all string values in ``obj``."""
+        if isinstance(obj, dict):
+            return {k: cls._limit_json_words(v, per_string) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [cls._limit_json_words(v, per_string) for v in obj]
+        if isinstance(obj, str):
+            return cls._trim_words(obj, per_string)
+        return obj
+
+    @staticmethod
     def _parse_json(text: str) -> Any:
         """Extract and parse the first JSON object found in text."""
         start = text.find("{")
@@ -228,12 +248,15 @@ class Agent:
         obj, _ = decoder.raw_decode(text[start:])
         return obj
 
-    async def run(self, project_json: str, context: Dict[str, Any], timeout: Optional[float] = DEFAULT_TIMEOUT) -> Any:
-        """
-        Invoke the LLM with formatted messages and return parsed JSON.
-        Raises ValueError on invalid JSON, or asyncio.TimeoutError on timeout.
-        """
-        messages = self.prompt.format_prompt(
+    async def run(
+        self,
+        project_json: str,
+        context: Dict[str, Any],
+        timeout: Optional[float] = DEFAULT_TIMEOUT,
+        retries: int = DEFAULT_RETRIES,
+    ) -> Any:
+        """Invoke the LLM and return parsed JSON with optional retries."""
+        base_messages = self.prompt.format_prompt(
             project=project_json,
             CEO=context.get("CEO", ""),
             CTO=context.get("CTO", ""),
@@ -241,24 +264,37 @@ class Agent:
             DEV=context.get("DEV", ""),
         ).to_messages()
 
-        try:
-            message = await asyncio.wait_for(
-                asyncio.to_thread(self.llm.invoke, messages),
-                timeout,
-            )
-            raw = getattr(message, "content", message)
+        attempt = 0
+        backoff = 1.0
+        while True:
             try:
-                parsed = self._parse_json(raw)
-            except json.JSONDecodeError:
-                logger.warning(
-                    f"Non-JSON response from {self.role}, returning raw text"
+                message = await asyncio.wait_for(
+                    asyncio.to_thread(self.llm.invoke, base_messages),
+                    timeout * backoff,
                 )
-                parsed = raw
-            logger.info(f"{self.role} responded successfully")
-            return parsed
-        except asyncio.TimeoutError:
-            logger.error(f"{self.role} agent timed out after {timeout}s")
-            raise
+                raw = getattr(message, "content", message)
+                parsed = self._parse_json(raw)
+                parsed = self._limit_json_words(parsed)
+                logger.info(f"{self.role} responded successfully")
+                return parsed
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"{self.role} agent timed out after {timeout * backoff}s"
+                )
+                if attempt >= retries:
+                    raise
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON from {self.role}")
+                if attempt >= retries:
+                    raise
+                base_messages.append(
+                    {
+                        "role": "system",
+                        "content": "Your last response was not valid JSON. Please answer again strictly in the required JSON format.",
+                    }
+                )
+            attempt += 1
+            backoff *= 1.5
 
 
 class B2BAgency:
@@ -339,13 +375,27 @@ class B2BAgency:
                 PageBreak(),
             ]
 
-            for role, content in self.results.items():
-                heading = f"{role} Analysis"
+            for agent in self.agents:
+                role = agent.role
+                content = self.results.get(role)
+                if content is None:
+                    continue
+
+                summary = json.dumps(content, indent=2, ensure_ascii=False)
+                story.append(Paragraph(f"{role} Summary", styles["Section"]))
+                story.append(
+                    Preformatted(summary, styles["NormalLeft"], maxLineLength=80)
+                )
+                story.append(PageBreak())
+
+                heading = f"{role} Details"
                 if isinstance(content, dict) and "title" in content:
                     heading = content.get("title") or heading
-                    content = {k: v for k, v in content.items() if k != "title"}
+                    body = {k: v for k, v in content.items() if k != "title"}
+                else:
+                    body = content
                 story.append(Paragraph(heading, styles["Section"]))
-                story.extend(to_flowables(content, styles))
+                story.extend(to_flowables(body, styles))
                 story.append(PageBreak())
 
             # Remove last page break for cleaner output

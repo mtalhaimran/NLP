@@ -69,6 +69,10 @@ def to_flowables(data: Any, styles) -> List[Any]:
             flows.extend(to_flowables(data["content"], styles))
         else:
             for k, v in data.items():
+                if k == "sections" and isinstance(v, list):
+                    for item in v:
+                        flows.extend(to_flowables(item, styles))
+                    continue
                 flows.append(
                     Paragraph(str(k).replace("_", " ").title(), styles["SubHeading"])
                 )
