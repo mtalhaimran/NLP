@@ -89,7 +89,7 @@ Respond concisely in JSON using this format:
     {{"heading": "<section heading>", "content": "<60 words max>"}}
   ]
 }}
-Keep the entire response under 200 words.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -107,7 +107,7 @@ CTO_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
 Respond in the same JSON format as above with short sections describing the components and scalability plan.
-Limit each section to 60 words and keep the total under 200 words.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -130,7 +130,7 @@ PM_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully and list key objectives.
 Respond using the JSON format described above with one section per phase and an additional section for overall notes.
-Keep each section under 60 words and the full response under 200 words.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -153,7 +153,7 @@ DEV_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Lead Developer. For each roadmap phase describe the main tasks and outline a CI/CD pipeline.
 Reply in the same JSON format with one section per phase and a final section "CI/CD Pipeline".
-Limit section content to 60 words each and keep the total under 200 words.
+Keep each section under 120 words and the full response under 400 words.
 '''
     ),
     human_prompt(
@@ -173,7 +173,7 @@ MARKETING_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
 Return the plan in the same JSON format with short sections for audience, channels and messaging.
-Keep each section under 60 words and the total under 200 words.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -196,7 +196,7 @@ CLIENT_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Client Success Manager. Using the implementation details, outline the onboarding process, retention strategy and feedback loop.
 Respond using the same JSON format with concise sections for onboarding, retention and feedback.
-Keep the entire response under 200 words.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
