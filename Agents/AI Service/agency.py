@@ -52,7 +52,8 @@ MODEL_TAGS = {role: "mistral:7b-instruct" for role in ["CEO", "CTO", "PM", "DEV"
 # slow to respond, especially on lower-spec hardware. 60 seconds proved too
 # short in practice, so we use a more generous default and expose it via the
 # CLI for user customisation.
-DEFAULT_TIMEOUT: float = 180.0
+DEFAULT_TIMEOUT: float = 240.0
+DEFAULT_RETRIES: int = 1
 
 # ─── DATA SCHEMA ───────────────────────────────────────────────────────
 class Project(BaseModel):
@@ -81,9 +82,14 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
-Summarize your decision, key risks, opportunities and recommendations using your own headings.
-Avoid strict JSON formatting and present the information in clear prose or bullet points.
-Keep the response under 200 words.
+Respond concisely in JSON using this format:
+{{
+  "title": "<short title>",
+  "sections": [
+    {{"heading": "<section heading>", "content": "<60 words max>"}}
+  ]
+}}
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -91,7 +97,7 @@ Project Data:
 ```json
 {project}
 ```
-Provide your analysis in free form using headings where appropriate.
+Return only the JSON described above.
 '''    ),
 ])
 
@@ -100,9 +106,8 @@ CTO_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
-Provide an overview, list the main components and outline a scalability strategy. You may include a title.
-Use headings and bullet points of your choosing and avoid strict JSON formatting.
-Keep the response under 200 words.
+Respond in the same JSON format as above with short sections describing the components and scalability plan.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -114,6 +119,7 @@ CEO Analysis:
 ```json
 {CEO}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -122,9 +128,9 @@ CEO Analysis:
 PM_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and list objectives and deliverables for each.
-Feel free to add a title and organise the roadmap using your own headings and bullet points instead of strict JSON.
-Keep the response under 200 words.
+You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully and list key objectives.
+Respond using the JSON format described above with one section per phase and an additional section for overall notes.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -136,6 +142,7 @@ CTO Specification:
 ```json
 {CTO}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -145,9 +152,8 @@ DEV_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Lead Developer. For each roadmap phase describe the main tasks and outline a CI/CD pipeline.
-Use markdown headings for each phase and bullet points for tasks. Include a section titled "CI/CD Pipeline" with the tooling and overview.
-Avoid strict JSON formatting.
-Keep the response under 200 words.
+Reply in the same JSON format with one section per phase and a final section "CI/CD Pipeline".
+Keep each section under 120 words and the full response under 400 words.
 '''
     ),
     human_prompt(
@@ -156,6 +162,7 @@ Roadmap:
 ```markdown
 {PM}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -164,9 +171,9 @@ Roadmap:
 MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
-You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. You may add a title.
-Describe the target audience, key channels and messaging themes using your own headings and bullet points instead of strict JSON.
-Keep the response under 200 words.
+You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan.
+Return the plan in the same JSON format with short sections for audience, channels and messaging.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -178,6 +185,7 @@ Roadmap:
 ```markdown
 {PM}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -187,8 +195,8 @@ CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Client Success Manager. Using the implementation details, outline the onboarding process, retention strategy and feedback loop.
-You may provide a title and organise the information in sections with bullet points. Avoid strict JSON formatting.
-Keep the response under 200 words.
+Respond using the same JSON format with concise sections for onboarding, retention and feedback.
+Keep each section under 120 words and the full response under 400 words.
 '''    ),
     human_prompt(
         '''
@@ -196,6 +204,7 @@ Implementation Details:
 ```json
 {DEV}
 ```
+Return only the JSON described above.
 '''
     ),
 ])
@@ -211,6 +220,25 @@ class Agent:
         self.llm = ChatOllama(model=model_name)
 
     @staticmethod
+    def _trim_words(text: str, limit: int) -> str:
+        """Return text limited to ``limit`` words."""
+        words = text.split()
+        if len(words) > limit:
+            return " ".join(words[:limit]) + "..."
+        return text
+
+    @classmethod
+    def _limit_json_words(cls, obj: Any, per_string: int = 60) -> Any:
+        """Recursively trim all string values in ``obj``."""
+        if isinstance(obj, dict):
+            return {k: cls._limit_json_words(v, per_string) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [cls._limit_json_words(v, per_string) for v in obj]
+        if isinstance(obj, str):
+            return cls._trim_words(obj, per_string)
+        return obj
+
+    @staticmethod
     def _parse_json(text: str) -> Any:
         """Extract and parse the first JSON object found in text."""
         start = text.find("{")
@@ -220,12 +248,15 @@ class Agent:
         obj, _ = decoder.raw_decode(text[start:])
         return obj
 
-    async def run(self, project_json: str, context: Dict[str, Any], timeout: Optional[float] = DEFAULT_TIMEOUT) -> Any:
-        """
-        Invoke the LLM with formatted messages and return parsed JSON.
-        Raises ValueError on invalid JSON, or asyncio.TimeoutError on timeout.
-        """
-        messages = self.prompt.format_prompt(
+    async def run(
+        self,
+        project_json: str,
+        context: Dict[str, Any],
+        timeout: Optional[float] = DEFAULT_TIMEOUT,
+        retries: int = DEFAULT_RETRIES,
+    ) -> Any:
+        """Invoke the LLM and return parsed JSON with optional retries."""
+        base_messages = self.prompt.format_prompt(
             project=project_json,
             CEO=context.get("CEO", ""),
             CTO=context.get("CTO", ""),
@@ -233,24 +264,37 @@ class Agent:
             DEV=context.get("DEV", ""),
         ).to_messages()
 
-        try:
-            message = await asyncio.wait_for(
-                asyncio.to_thread(self.llm.invoke, messages),
-                timeout,
-            )
-            raw = getattr(message, "content", message)
+        attempt = 0
+        backoff = 1.0
+        while True:
             try:
-                parsed = self._parse_json(raw)
-            except json.JSONDecodeError:
-                logger.warning(
-                    f"Non-JSON response from {self.role}, returning raw text"
+                message = await asyncio.wait_for(
+                    asyncio.to_thread(self.llm.invoke, base_messages),
+                    timeout * backoff,
                 )
-                parsed = raw
-            logger.info(f"{self.role} responded successfully")
-            return parsed
-        except asyncio.TimeoutError:
-            logger.error(f"{self.role} agent timed out after {timeout}s")
-            raise
+                raw = getattr(message, "content", message)
+                parsed = self._parse_json(raw)
+                parsed = self._limit_json_words(parsed)
+                logger.info(f"{self.role} responded successfully")
+                return parsed
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"{self.role} agent timed out after {timeout * backoff}s"
+                )
+                if attempt >= retries:
+                    raise
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON from {self.role}")
+                if attempt >= retries:
+                    raise
+                base_messages.append(
+                    {
+                        "role": "system",
+                        "content": "Your last response was not valid JSON. Please answer again strictly in the required JSON format.",
+                    }
+                )
+            attempt += 1
+            backoff *= 1.5
 
 
 class B2BAgency:
@@ -331,13 +375,27 @@ class B2BAgency:
                 PageBreak(),
             ]
 
-            for role, content in self.results.items():
-                heading = f"{role} Analysis"
+            for agent in self.agents:
+                role = agent.role
+                content = self.results.get(role)
+                if content is None:
+                    continue
+
+                summary = json.dumps(content, indent=2, ensure_ascii=False)
+                story.append(Paragraph(f"{role} Summary", styles["Section"]))
+                story.append(
+                    Preformatted(summary, styles["NormalLeft"], maxLineLength=80)
+                )
+                story.append(PageBreak())
+
+                heading = f"{role} Details"
                 if isinstance(content, dict) and "title" in content:
                     heading = content.get("title") or heading
-                    content = {k: v for k, v in content.items() if k != "title"}
+                    body = {k: v for k, v in content.items() if k != "title"}
+                else:
+                    body = content
                 story.append(Paragraph(heading, styles["Section"]))
-                story.extend(to_flowables(content, styles))
+                story.extend(to_flowables(body, styles))
                 story.append(PageBreak())
 
             # Remove last page break for cleaner output
