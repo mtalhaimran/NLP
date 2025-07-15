@@ -83,6 +83,7 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
 Summarize your decision, key risks, opportunities and recommendations using your own headings.
 Avoid strict JSON formatting and present the information in clear prose or bullet points.
+Keep the response under 200 words.
 '''    ),
     human_prompt(
         '''
@@ -100,7 +101,9 @@ CTO_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the CTO. Using the project data and the CEO's analysis, propose a system architecture and technology stack.
 Provide an overview, list the main components and outline a scalability strategy. You may include a title.
-Use headings and bullet points of your choosing and avoid strict JSON formatting.'''    ),
+Use headings and bullet points of your choosing and avoid strict JSON formatting.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Project Data:
@@ -120,7 +123,9 @@ PM_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Product Manager. Create a three-phase roadmap. Name each phase meaningfully (e.g., "MVP", "Growth", "Scale") and list objectives and deliverables for each.
-Feel free to add a title and organise the roadmap using your own headings and bullet points instead of strict JSON.'''    ),
+Feel free to add a title and organise the roadmap using your own headings and bullet points instead of strict JSON.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Project Data:
@@ -141,7 +146,9 @@ DEV_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Lead Developer. For each roadmap phase describe the main tasks and outline a CI/CD pipeline.
 Use markdown headings for each phase and bullet points for tasks. Include a section titled "CI/CD Pipeline" with the tooling and overview.
-Avoid strict JSON formatting.'''
+Avoid strict JSON formatting.
+Keep the response under 200 words.
+'''
     ),
     human_prompt(
         '''
@@ -158,7 +165,9 @@ MARKETING_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Marketing Manager. Based on the roadmap, craft a concise go-to-market plan. You may add a title.
-Describe the target audience, key channels and messaging themes using your own headings and bullet points instead of strict JSON.'''    ),
+Describe the target audience, key channels and messaging themes using your own headings and bullet points instead of strict JSON.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Project Data:
@@ -178,7 +187,9 @@ CLIENT_PROMPT = ChatPromptTemplate.from_messages([
     system_prompt(
         '''
 You are the Client Success Manager. Using the implementation details, outline the onboarding process, retention strategy and feedback loop.
-You may provide a title and organise the information in sections with bullet points. Avoid strict JSON formatting.'''    ),
+You may provide a title and organise the information in sections with bullet points. Avoid strict JSON formatting.
+Keep the response under 200 words.
+'''    ),
     human_prompt(
         '''
 Implementation Details:

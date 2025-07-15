@@ -132,13 +132,8 @@ async def analyze_text(
     pj = project.model_dump_json()
 
     async def run(role: str, deps: List[str] | None = None):
-        if deps:
-            await asyncio.gather(*(agency.events[d].wait() for d in deps))
         with st.spinner(f"Running {role}…"):
-            res = await agency.agent_map[role].run(pj, agency.context, agency.timeout)
-        agency.context[role] = res
-        agency.results[role] = res
-        agency.events[role].set()
+            await agency._run_agent(role, pj, deps)
 
     await run("CEO")
     cto_task = asyncio.create_task(run("CTO", ["CEO"]))
