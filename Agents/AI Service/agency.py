@@ -82,12 +82,12 @@ CEO_PROMPT = ChatPromptTemplate.from_messages([
         '''
 You are the Chief Strategy Officer. Review the provided project data and perform a Go/No-Go analysis.
 Respond concisely in JSON using this format:
-{
+{{
   "title": "<short title>",
   "sections": [
-    {"heading": "<section heading>", "content": "<60 words max>"}
+    {{"heading": "<section heading>", "content": "<60 words max>"}}
   ]
-}
+}}
 Keep the entire response under 200 words.
 '''    ),
     human_prompt(
