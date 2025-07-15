@@ -265,7 +265,14 @@ class B2BAgency:
             await asyncio.gather(*(self.events[d].wait() for d in deps))
         agent = self.agent_map[role]
         logger.info(f"Running {role} agent…")
-        res = await agent.run(project_json, self.context, self.timeout)
+        try:
+            res = await agent.run(project_json, self.context, self.timeout)
+        except asyncio.TimeoutError:
+            logger.error(f"{role} agent timed out after {self.timeout}s")
+            res = {"error": f"{role} agent timed out"}
+        except Exception as e:
+            logger.exception(f"{role} agent failed: {e}")
+            res = {"error": str(e)}
         self.context[role] = res
         self.results[role] = res
         self.events[role].set()
