@@ -1,4 +1,4 @@
-# AI Services Agency 👨‍💼
+# AI Services Agency AutoLead Enigma Group 👨‍💼
 
 An AI application that simulates a full-service digital agency using multiple AI agents to analyze and plan software projects. Each agent represents a different role in the project lifecycle, from strategic planning to technical implementation.
 
